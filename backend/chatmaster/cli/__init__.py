@@ -1,0 +1,1 @@
+"""ChatMaster CLI entrypoints."""
