@@ -147,3 +147,38 @@ body {
 .settings-test { margin-top: 16px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
 .settings-test .ok { color: #16a34a; }
 .settings-test .bad { color: #dc2626; }
+
+/* Knowledge */
+.knowledge-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.knowledge-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.knowledge-section h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+}

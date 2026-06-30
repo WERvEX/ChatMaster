@@ -8,6 +8,7 @@ import { ChatInput } from "./features/chat/ChatInput";
 import { SourceList } from "./features/chat/SourceList";
 import { DocumentUpload } from "./components/DocumentUpload";
 import { ProviderSettings } from "./components/ProviderSettings";
+import { KnowledgePage } from "./features/knowledge/KnowledgePage";
 
 export default function App() {
   const { identities, loading, error } = useIdentities();
@@ -17,6 +18,7 @@ export default function App() {
   const chat = useChat(selectedId);
   const isChatRoute = location.pathname === "/chat";
   const isSettingsRoute = location.pathname === "/settings";
+  const isKnowledgeRoute = location.pathname === "/knowledge";
 
   // Reset conversation when switching identity.
   useEffect(() => {
@@ -40,6 +42,12 @@ export default function App() {
         />
         {selectedId && isChatRoute && <DocumentUpload identityId={selectedId} />}
         <button
+          className={`settings-toggle ${isKnowledgeRoute ? "active" : ""}`}
+          onClick={() => navigate("/knowledge")}
+        >
+          知识库
+        </button>
+        <button
           className={`settings-toggle ${isSettingsRoute ? "active" : ""}`}
           onClick={() => navigate(isSettingsRoute ? "/chat" : "/settings")}
         >
@@ -50,6 +58,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/chat" replace />} />
         <Route path="/settings" element={<ProviderSettings onBack={() => navigate("/chat")} />} />
+        <Route path="/knowledge" element={<KnowledgePage identityId={selectedId} />} />
         <Route
           path="/chat"
           element={

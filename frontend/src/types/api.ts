@@ -46,6 +46,29 @@ export interface IngestResult {
   total_chunks: number;
 }
 
+export interface DocumentOut {
+  id: string;
+  identity_id: string | null;
+  namespace: string;
+  filename: string;
+  content_type: string | null;
+  storage_path: string;
+  sha256: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IngestJobOut {
+  id: string;
+  document_id: string;
+  status: string;
+  error: string | null;
+  total_chunks: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ChatProviderConfig {
   provider: string; // openai | anthropic
   base_url: string | null;

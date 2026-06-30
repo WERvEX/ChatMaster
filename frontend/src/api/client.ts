@@ -1,4 +1,11 @@
-import type { IdentityOut, IngestResult, ProvidersConfig, ProviderTestResult } from "../types/api";
+import type {
+  DocumentOut,
+  IdentityOut,
+  IngestJobOut,
+  IngestResult,
+  ProvidersConfig,
+  ProviderTestResult,
+} from "../types/api";
 
 export async function getIdentities(): Promise<IdentityOut[]> {
   const r = await fetch("/api/identities");
@@ -48,5 +55,17 @@ export async function testProviders(): Promise<ProviderTestResult> {
     const detail = await r.text();
     throw new Error(`Test failed (${r.status}): ${detail}`);
   }
+  return r.json();
+}
+
+export async function getDocuments(): Promise<DocumentOut[]> {
+  const r = await fetch("/api/documents");
+  if (!r.ok) throw new Error(`Failed to load documents: ${r.status}`);
+  return r.json();
+}
+
+export async function getIngestJobs(): Promise<IngestJobOut[]> {
+  const r = await fetch("/api/ingest-jobs");
+  if (!r.ok) throw new Error(`Failed to load ingest jobs: ${r.status}`);
   return r.json();
 }
