@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useIdentities } from "./hooks/useIdentities";
 import { useChat } from "./hooks/useChat";
 import { IdentitySelector } from "./components/IdentitySelector";
@@ -8,13 +9,14 @@ import { SourceList } from "./components/SourceList";
 import { DocumentUpload } from "./components/DocumentUpload";
 import { ProviderSettings } from "./components/ProviderSettings";
 
-type View = "chat" | "settings";
-
 export default function App() {
   const { identities, loading, error } = useIdentities();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [view, setView] = useState<View>("chat");
+  const location = useLocation();
+  const navigate = useNavigate();
   const chat = useChat(selectedId);
+  const isChatRoute = location.pathname === "/chat";
+  const isSettingsRoute = location.pathname === "/settings";
 
   // Reset conversation when switching identity.
   useEffect(() => {
@@ -31,39 +33,45 @@ export default function App() {
           selectedId={selectedId}
           onSelect={(id) => {
             setSelectedId(id);
-            setView("chat");
+            navigate("/chat");
           }}
           loading={loading}
           error={error}
         />
-        {selectedId && view === "chat" && <DocumentUpload identityId={selectedId} />}
+        {selectedId && isChatRoute && <DocumentUpload identityId={selectedId} />}
         <button
-          className={`settings-toggle ${view === "settings" ? "active" : ""}`}
-          onClick={() => setView(view === "settings" ? "chat" : "settings")}
+          className={`settings-toggle ${isSettingsRoute ? "active" : ""}`}
+          onClick={() => navigate(isSettingsRoute ? "/chat" : "/settings")}
         >
           ⚙ API 配置
         </button>
       </aside>
 
-      {view === "settings" ? (
-        <ProviderSettings onBack={() => setView("chat")} />
-      ) : (
-        <main className="main">
-          <div className="main-header">
-            <span>{identities.find((i) => i.id === selectedId)?.name ?? "未选择身份"}</span>
-            {selectedId && <button className="btn-link" onClick={chat.clear}>清空对话</button>}
-          </div>
-          <ChatWindow messages={chat.messages} isStreaming={chat.isStreaming} />
-          <SourceList sources={chat.sources} />
-          {chat.error && <div className="error">{chat.error}</div>}
-          <ChatInput
-            onSend={chat.sendMessage}
-            onStop={chat.stop}
-            isStreaming={chat.isStreaming}
-            disabled={!selectedId}
-          />
-        </main>
-      )}
+      <Routes>
+        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route path="/settings" element={<ProviderSettings onBack={() => navigate("/chat")} />} />
+        <Route
+          path="/chat"
+          element={
+            <main className="main">
+              <div className="main-header">
+                <span>{identities.find((i) => i.id === selectedId)?.name ?? "未选择身份"}</span>
+                {selectedId && <button className="btn-link" onClick={chat.clear}>清空对话</button>}
+              </div>
+              <ChatWindow messages={chat.messages} isStreaming={chat.isStreaming} />
+              <SourceList sources={chat.sources} />
+              {chat.error && <div className="error">{chat.error}</div>}
+              <ChatInput
+                onSend={chat.sendMessage}
+                onStop={chat.stop}
+                isStreaming={chat.isStreaming}
+                disabled={!selectedId}
+              />
+            </main>
+          }
+        />
+        <Route path="*" element={<Navigate to="/chat" replace />} />
+      </Routes>
     </div>
   );
 }

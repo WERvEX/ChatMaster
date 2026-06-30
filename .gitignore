@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+frontend/.npm-cache/
 __pycache__/
 *.py[cod]
 *$py.class
