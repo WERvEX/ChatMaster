@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     identity_id: str
     message: str
     history: list[MessageIn] = []
+    conversation_id: str | None = None
 
 
 class IngestFileResult(BaseModel):
