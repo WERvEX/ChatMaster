@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # On first run, if this file is absent it is seeded from the .env values above.
     providers_file: str = "data/providers.json"
 
+    # Local/small-team persistence. SQLite is the demo default; the schema is
+    # kept PostgreSQL-compatible so DATABASE_URL can later point to Postgres.
+    database_url: str = "sqlite:///./data/chatmaster.db"
+    storage_dir: str = "data/storage"
+    local_workspace_id: str = "local"
+    local_user_id: str = "local-user"
+
     # RAG
     common_collection: str = "chatmaster_common"
     common_top_k: int = 4

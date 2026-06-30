@@ -27,6 +27,9 @@ logger = logging.getLogger("chatmaster")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    from chatmaster.db.init_db import init_db
+
+    init_db()
     registry = get_registry()  # validates identities.yaml, fails fast on typos
 
     # Determine embedding dimension for the default embedding model.
