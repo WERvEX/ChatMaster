@@ -28,8 +28,12 @@ logger = logging.getLogger("chatmaster")
 async def lifespan(app: FastAPI):
     settings = get_settings()
     from chatmaster.db.init_db import init_db
+    from chatmaster.db.seed import seed_local_data
+    from chatmaster.db.session import SessionLocal
 
     init_db()
+    with SessionLocal() as db:
+        seed_local_data(db, settings)
     registry = get_registry()  # validates identities.yaml, fails fast on typos
 
     # Determine embedding dimension for the default embedding model.

@@ -15,6 +15,7 @@ import threading
 from functools import lru_cache
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel
 
 from chatmaster.config import get_settings
@@ -77,10 +78,21 @@ def seed_from_settings() -> ProvidersConfig:
 def get_provider_config() -> ProvidersConfig:
     """Return the active provider config.
 
-    Loads from the persisted JSON file; falls back to the ``.env`` seed if the
-    file is missing or corrupt. The result is cached — call
+    Loads from the local database when available; falls back to the legacy JSON
+    file and then the ``.env`` seed if the database is not initialized. The
+    result is cached — call
     :func:`save_provider_config` (which clears the cache) after edits.
     """
+    try:
+        from chatmaster.db.session import SessionLocal
+        from chatmaster.providers.service import get_provider_config as _get_db_config
+
+        settings = get_settings()
+        with SessionLocal() as db:
+            return _get_db_config(db, settings.local_workspace_id, settings)
+    except SQLAlchemyError:
+        pass
+
     path = providers_path()
     if path.exists():
         try:
@@ -94,10 +106,18 @@ def get_provider_config() -> ProvidersConfig:
 
 def save_provider_config(cfg: ProvidersConfig) -> ProvidersConfig:
     """Persist ``cfg`` to disk and invalidate all downstream caches."""
-    path = providers_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with _LOCK:
-        path.write_text(cfg.model_dump_json(indent=2), encoding="utf-8")
+    try:
+        from chatmaster.db.session import SessionLocal
+        from chatmaster.providers.service import save_provider_config as _save_db_config
+
+        settings = get_settings()
+        with _LOCK, SessionLocal() as db:
+            _save_db_config(db, settings.local_workspace_id, cfg, settings)
+    except SQLAlchemyError:
+        path = providers_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _LOCK:
+            path.write_text(cfg.model_dump_json(indent=2), encoding="utf-8")
     get_provider_config.cache_clear()
 
     # The model/embedding builders cache instances by (model, base_url, key);
