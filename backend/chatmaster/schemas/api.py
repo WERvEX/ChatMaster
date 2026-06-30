@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -36,3 +38,26 @@ class HealthOut(BaseModel):
     providers: dict
     collections: list[str]
     identities: list[str]
+
+
+class DocumentOut(BaseModel):
+    id: str
+    identity_id: str | None
+    namespace: str
+    filename: str
+    content_type: str | None
+    storage_path: str
+    sha256: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class IngestJobOut(BaseModel):
+    id: str
+    document_id: str
+    status: str
+    error: str | None
+    total_chunks: int
+    created_at: datetime
+    updated_at: datetime

@@ -1,47 +1,110 @@
-"""Document ingestion endpoint: POST /api/documents/ingest (multipart upload)."""
+"""Document ingestion and listing endpoints."""
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from sqlalchemy.orm import Session
 
-from chatmaster.ai.loaders import SUPPORTED_EXTENSIONS
 from chatmaster.config import get_settings
-from chatmaster.services.ingest_service import ingest
+from chatmaster.db.models import Document, IngestJob
+from chatmaster.db.session import get_db
+from chatmaster.documents.service import (
+    UnsupportedDocumentType,
+    ingest_uploaded_document,
+    list_documents,
+    list_ingest_jobs,
+)
+from chatmaster.identities.loader import get_registry
+from chatmaster.schemas.api import DocumentOut, IngestJobOut, IngestResult
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+router = APIRouter(tags=["documents"])
 
 
-@router.post("/ingest")
+@router.post("/api/documents/ingest", response_model=IngestResult)
 async def ingest_documents(
     files: list[UploadFile] = File(...),
     identity_id: str = Form(...),
     target: str = Form("private"),
+    db: Session = Depends(get_db),
 ):
     if target not in {"private", "common"}:
         raise HTTPException(status_code=400, detail="target must be 'private' or 'common'")
 
     settings = get_settings()
-    saved_paths: list[Path] = []
+    file_results = []
 
-    # Persist uploads to a temp dir, then ingest. ingest_service works on Paths.
-    with tempfile.TemporaryDirectory() as tmp:
-        for f in files:
-            ext = Path(f.filename or "").suffix.lower()
-            if ext not in SUPPORTED_EXTENSIONS:
-                raise HTTPException(
-                    status_code=400, detail=f"Unsupported file type: {f.filename}"
-                )
-            data = await f.read()
-            if len(data) > settings.upload_max_bytes:
-                raise HTTPException(
-                    status_code=413, detail=f"{f.filename} exceeds upload size limit"
-                )
-            dest = Path(tmp) / (f.filename or "uploaded")
-            dest.write_bytes(data)
-            saved_paths.append(dest)
+    for uploaded in files:
+        filename = Path(uploaded.filename or "uploaded").name
+        data = await uploaded.read()
+        if len(data) > settings.upload_max_bytes:
+            raise HTTPException(status_code=413, detail=f"{filename} exceeds upload size limit")
+        try:
+            result = ingest_uploaded_document(
+                db=db,
+                workspace_id=settings.local_workspace_id,
+                identity_id=identity_id,
+                target=target,
+                filename=filename,
+                content_type=uploaded.content_type,
+                data=data,
+                storage_dir=settings.storage_dir,
+            )
+        except UnsupportedDocumentType as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        file_results.append(result)
 
-        result = ingest(identity_id, saved_paths, target=target)
-        return result
+    return IngestResult(
+        identity_id=identity_id,
+        target=target,
+        collection=(
+            settings.common_collection
+            if target == "common"
+            else get_registry().get(identity_id).private_collection
+        ),
+        files=file_results,
+        total_chunks=sum(file.chunks for file in file_results),
+    )
+
+
+@router.get("/api/documents", response_model=list[DocumentOut])
+async def get_documents(
+    identity_id: str | None = Query(None),
+    namespace: str | None = Query(None),
+    status: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    return list_documents(
+        db,
+        workspace_id=settings.local_workspace_id,
+        identity_id=identity_id,
+        namespace=namespace,
+        status=status,
+    )
+
+
+@router.get("/api/documents/{document_id}", response_model=DocumentOut)
+async def get_document(document_id: str, db: Session = Depends(get_db)):
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return document
+
+
+@router.get("/api/ingest-jobs", response_model=list[IngestJobOut])
+async def get_ingest_jobs(
+    status: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    return list_ingest_jobs(db, workspace_id=settings.local_workspace_id, status=status)
+
+
+@router.get("/api/ingest-jobs/{job_id}", response_model=IngestJobOut)
+async def get_ingest_job(job_id: str, db: Session = Depends(get_db)):
+    job = db.get(IngestJob, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Ingest job not found")
+    return job
