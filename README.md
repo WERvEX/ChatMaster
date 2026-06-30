@@ -4,6 +4,8 @@
 
 AI 编排层使用 [LangChain](https://python.langchain.com)（结构上为后续升级 LangGraph 留好接口），HTTP 层使用 FastAPI，向量库使用 Qdrant，前端是 React + Vite。**API 配置（对话模型 / 向量模型的 base_url、key、模型名）可在 Web 页面运行时自定义**，无需改代码或重启。
 
+> 架构说明：当前重构目标是本地 / 小团队 MVP，同时保留后续多用户上线能力。业务数据使用 SQLite（可迁移到 PostgreSQL），向量数据使用 Qdrant，RAG 工作流逐步迁移到 LangGraph。详见 `docs/architecture.md`。
+
 ---
 
 ## ✨ 特性
