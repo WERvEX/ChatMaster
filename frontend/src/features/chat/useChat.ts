@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { streamChat } from "../api/sse";
-import type { Message, SourceItem } from "../types/api";
+import { streamChat } from "../../api/sse";
+import type { Message, SourceItem } from "../../types/api";
 
 export function useChat(identityId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);

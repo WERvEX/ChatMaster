@@ -1,4 +1,4 @@
-import type { Message } from "../types/api";
+import type { Message } from "../../types/api";
 
 export function ChatMessage({ msg }: { msg: Message }) {
   return (

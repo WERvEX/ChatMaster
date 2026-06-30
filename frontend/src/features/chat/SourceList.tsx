@@ -1,4 +1,4 @@
-import type { SourceItem } from "../types/api";
+import type { SourceItem } from "../../types/api";
 
 export function SourceList({ sources }: { sources: SourceItem[] }) {
   if (sources.length === 0) return null;

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useIdentities } from "./hooks/useIdentities";
-import { useChat } from "./hooks/useChat";
+import { useChat } from "./features/chat/useChat";
 import { IdentitySelector } from "./components/IdentitySelector";
-import { ChatWindow } from "./components/ChatWindow";
-import { ChatInput } from "./components/ChatInput";
-import { SourceList } from "./components/SourceList";
+import { ChatWindow } from "./features/chat/ChatWindow";
+import { ChatInput } from "./features/chat/ChatInput";
+import { SourceList } from "./features/chat/SourceList";
 import { DocumentUpload } from "./components/DocumentUpload";
 import { ProviderSettings } from "./components/ProviderSettings";
 

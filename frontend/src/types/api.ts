@@ -22,6 +22,7 @@ export interface ChatRequest {
   identity_id: string;
   message: string;
   history: Message[];
+  conversation_id?: string | null;
 }
 
 export interface SourceItem {

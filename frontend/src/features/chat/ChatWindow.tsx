@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Message } from "../types/api";
+import type { Message } from "../../types/api";
 import { ChatMessage } from "./ChatMessage";
 
 interface Props {
