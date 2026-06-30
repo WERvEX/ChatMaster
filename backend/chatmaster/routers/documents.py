@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy.orm import Session
 
 from chatmaster.config import get_settings
+from chatmaster.core.auth import get_current_workspace_id
 from chatmaster.db.models import Document, IngestJob
 from chatmaster.db.session import get_db
 from chatmaster.documents.service import (
@@ -27,6 +28,7 @@ async def ingest_documents(
     files: list[UploadFile] = File(...),
     identity_id: str = Form(...),
     target: str = Form("private"),
+    workspace_id: str = Depends(get_current_workspace_id),
     db: Session = Depends(get_db),
 ):
     if target not in {"private", "common"}:
@@ -43,7 +45,7 @@ async def ingest_documents(
         try:
             result = ingest_uploaded_document(
                 db=db,
-                workspace_id=settings.local_workspace_id,
+                workspace_id=workspace_id,
                 identity_id=identity_id,
                 target=target,
                 filename=filename,
@@ -73,12 +75,12 @@ async def get_documents(
     identity_id: str | None = Query(None),
     namespace: str | None = Query(None),
     status: str | None = Query(None),
+    workspace_id: str = Depends(get_current_workspace_id),
     db: Session = Depends(get_db),
 ):
-    settings = get_settings()
     return list_documents(
         db,
-        workspace_id=settings.local_workspace_id,
+        workspace_id=workspace_id,
         identity_id=identity_id,
         namespace=namespace,
         status=status,
@@ -96,10 +98,10 @@ async def get_document(document_id: str, db: Session = Depends(get_db)):
 @router.get("/api/ingest-jobs", response_model=list[IngestJobOut])
 async def get_ingest_jobs(
     status: str | None = Query(None),
+    workspace_id: str = Depends(get_current_workspace_id),
     db: Session = Depends(get_db),
 ):
-    settings = get_settings()
-    return list_ingest_jobs(db, workspace_id=settings.local_workspace_id, status=status)
+    return list_ingest_jobs(db, workspace_id=workspace_id, status=status)
 
 
 @router.get("/api/ingest-jobs/{job_id}", response_model=IngestJobOut)

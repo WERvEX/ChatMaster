@@ -8,7 +8,7 @@ POST /api/providers/test  → smoke-test the configured chat + embedding provide
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -20,6 +20,7 @@ from chatmaster.ai.providers import (
     mask_key,
     save_provider_config,
 )
+from chatmaster.core.auth import get_current_workspace_id
 from chatmaster.identities.loader import get_registry
 from chatmaster.identities.schema import IdentityConfig, RetrievalConfig
 
@@ -46,12 +47,17 @@ def _masked(cfg: ProvidersConfig) -> dict:
 
 
 @router.get("")
-async def get_providers():
+async def get_providers(workspace_id: str = Depends(get_current_workspace_id)):
+    _ = workspace_id
     return _masked(get_provider_config())
 
 
 @router.put("")
-async def update_providers(payload: ProvidersConfig):
+async def update_providers(
+    payload: ProvidersConfig,
+    workspace_id: str = Depends(get_current_workspace_id),
+):
+    _ = workspace_id
     current = get_provider_config()
     # If the UI sent back the masked key (or an empty string), keep the stored
     # key instead of overwriting it with the mask.
@@ -69,7 +75,8 @@ class ProviderTestResult(BaseModel):
 
 
 @router.post("/test", response_model=ProviderTestResult)
-async def test_providers():
+async def test_providers(workspace_id: str = Depends(get_current_workspace_id)):
+    _ = workspace_id
     """Smoke-test the currently saved chat + embedding providers.
 
     Runs the (synchronous) LangChain calls in a threadpool so the event loop
