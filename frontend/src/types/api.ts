@@ -69,6 +69,23 @@ export interface IngestJobOut {
   updated_at: string;
 }
 
+export interface ConversationOut {
+  id: string;
+  workspace_id: string;
+  identity_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageOut {
+  id: string;
+  role: string;
+  content: string;
+  sources_json: SourceItem[] | null;
+  created_at: string;
+}
+
 export interface ChatProviderConfig {
   provider: string; // openai | anthropic
   base_url: string | null;

@@ -12,6 +12,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_qdrant import QdrantVectorStore
 
 from chatmaster.config import get_settings
+from chatmaster.retrieval.vectorstore import validate_vector_dimension
 
 # Cache QdrantVectorStore by (collection, model_key). We must NOT key on the
 # embeddings object itself — Embeddings instances (e.g. HuggingFaceEmbeddings)
@@ -38,6 +39,10 @@ def ensure_collection(name: str, dim: int) -> None:
     client = _client()
     existing = {c.name for c in client.get_collections().collections}
     if name in existing:
+        info = client.get_collection(name)
+        vectors = info.config.params.vectors
+        actual_dim = vectors.size if hasattr(vectors, "size") else int(vectors["size"])
+        validate_vector_dimension(name, dim, actual_dim)
         return
     client.create_collection(
         collection_name=name,

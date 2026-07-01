@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from chatmaster.config import get_settings
 from chatmaster.identities.loader import get_registry
-from chatmaster.routers import chat, documents, health, identities, providers
+from chatmaster.routers import chat, conversations, documents, health, identities, providers
 
 logger = logging.getLogger("chatmaster")
 
@@ -68,6 +68,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(identities.router)
+    app.include_router(conversations.router)
     app.include_router(chat.router)
     app.include_router(documents.router)
     app.include_router(providers.router)

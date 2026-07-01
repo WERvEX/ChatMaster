@@ -2,7 +2,7 @@
 
 一个多身份（multi-identity）的 AI 聊天智能体。每个身份（法律专家 / 情感大师 / 职业 prompt 工程师，……）都基于**自己的 RAG 知识库**回答问题，支持流式输出与引用来源。身份是「配置即数据」——新增身份只需改一个 YAML 文件，无需写代码。
 
-AI 编排层使用 [LangChain](https://python.langchain.com)（结构上为后续升级 LangGraph 留好接口），HTTP 层使用 FastAPI，向量库使用 Qdrant，前端是 React + Vite。**API 配置（对话模型 / 向量模型的 base_url、key、模型名）可在 Web 页面运行时自定义**，无需改代码或重启。
+RAG 对话工作流使用 [LangGraph](https://langchain-ai.github.io/langgraph/)，HTTP 层使用 FastAPI，业务数据使用 SQLite，向量库使用 Qdrant，前端是 React + Vite。**API 配置（对话模型 / 向量模型的 base_url、key、模型名）可在 Web 页面运行时自定义**，无需改代码或重启。
 
 > 架构说明：当前重构目标是本地 / 小团队 MVP，同时保留后续多用户上线能力。业务数据使用 SQLite（可迁移到 PostgreSQL），向量数据使用 Qdrant，RAG 工作流逐步迁移到 LangGraph。详见 `docs/architecture.md`。
 
@@ -86,11 +86,11 @@ ChatMaster/
 
 ## 🚀 快速开始
 
-### 0. 准备 Python 环境（建议独立 conda 环境）
+### 0. 准备 Python 环境
 
 ```bash
-conda create -n chatmaster python=3.12 -y
 conda activate chatmaster
+# 若无环境：conda create -n chatmaster python=3.12 -y
 ```
 
 ### 1. 启动 Qdrant
@@ -105,7 +105,7 @@ docker compose up -d qdrant
 ```bash
 cp .env.example backend/.env
 cd backend
-pip install -e .          # 或 pip install -e ".[dev]"
+pip install -e ".[dev]"
 ```
 
 编辑 `backend/.env`，至少填入一个对话模型的 API key（DeepSeek 示例）：
@@ -120,7 +120,7 @@ HUGGINGFACE_ENDPOINT=https://hf-mirror.com      # 国内镜像，避免下载超
 PROVIDERS_FILE=data/providers.json
 ```
 
-> 说明：`.env` 里的 provider 配置只是**首次启动的种子**。启动后会写入 `data/providers.json`，之后以「API 配置」页面里保存的为准。也可设置环境变量 `HF_ENDPOINT=https://hf-mirror.com` 确保模型下载走镜像。
+> 说明：`.env` 是首次种子；在「API 配置」页面保存后写入 SQLite `provider_configs`，之后以数据库为准。
 
 ### 3. 启动后端
 
@@ -133,12 +133,11 @@ uvicorn chatmaster.main:app --reload --port 8000
 ### 4. 导入知识库
 
 ```bash
-# 从 backend/ 目录
-python -m chatmaster.cli.ingest --identity legal_expert --path ./data/sample_docs/legal_expert
-python -m chatmaster.cli.ingest --identity legal_expert --path ./data/sample_docs/common --common
+python scripts/seed_sample_docs.py
+# 或手动：python -m chatmaster.cli.ingest -i legal_expert -p ./data/sample_docs/legal_expert
 ```
 
-也可启动前端后用网页上传。
+CLI 与网页上传均写入 SQLite，在「知识库」页可见。
 
 ### 5. 启动前端
 
@@ -203,8 +202,12 @@ SSE 事件流：`sources` → 多个 `token` → `done`。
 | GET | `/api/health` | 健康检查：当前 provider 配置、集合、身份 |
 | GET | `/api/identities` | 身份列表（不含 system prompt） |
 | GET | `/api/identities/{id}` | 单个身份详情 |
-| POST | `/api/chat` | SSE 流式对话：`sources` / `token` / `done` / `error` |
-| POST | `/api/documents/ingest` | 多文件上传入库（multipart） |
+| POST | `/api/chat` | SSE 流式对话 |
+| POST | `/api/conversations` | 创建会话 |
+| GET | `/api/conversations` | 会话列表 |
+| GET | `/api/conversations/{id}/messages` | 会话消息 |
+| DELETE | `/api/conversations/{id}` | 删除会话 |
+| POST | `/api/documents/ingest` | 文档上传入库 |
 | GET | `/api/providers` | 读取 API 配置（key 脱敏） |
 | PUT | `/api/providers` | 保存 API 配置 |
 | POST | `/api/providers/test` | 测试对话 + 向量连接 |

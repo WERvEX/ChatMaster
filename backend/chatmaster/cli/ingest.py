@@ -17,7 +17,11 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 import typer
 
 from chatmaster.ai.loaders import SUPPORTED_EXTENSIONS
-from chatmaster.services.ingest_service import ingest
+from chatmaster.config import get_settings
+from chatmaster.db.init_db import init_db
+from chatmaster.db.seed import seed_local_data
+from chatmaster.db.session import SessionLocal
+from chatmaster.documents.service import ingest_path_document
 
 app = typer.Typer(add_completion=False, help="ChatMaster document ingestion CLI.")
 
@@ -52,17 +56,31 @@ def main(
         typer.echo("No files to ingest.", err=True)
         raise typer.Exit(1)
 
-    typer.echo(f"Ingesting {len(candidates)} file(s) into '{target}' for identity '{identity}'...")
-    result = ingest(identity, candidates, target=target)
+    settings = get_settings()
+    init_db()
+    with SessionLocal() as db:
+        seed_local_data(db, settings)
 
-    for fr in result.files:
-        if fr.error:
-            typer.echo(f"  ✗ {fr.file}: {fr.error}")
-        else:
-            typer.echo(f"  ✓ {fr.file}: {fr.chunks} chunks")
-    typer.echo(
-        f"Done. Collection: {result.collection} | Total chunks: {result.total_chunks}"
-    )
+        typer.echo(
+            f"Ingesting {len(candidates)} file(s) into '{target}' for identity '{identity}'..."
+        )
+        total_chunks = 0
+        for candidate in candidates:
+            result = ingest_path_document(
+                db=db,
+                workspace_id=settings.local_workspace_id,
+                identity_id=identity,
+                target=target,
+                source_path=candidate,
+                storage_dir=settings.storage_dir,
+            )
+            if result.error:
+                typer.echo(f"  ✗ {result.file}: {result.error}")
+            else:
+                typer.echo(f"  ✓ {result.file}: {result.chunks} chunks")
+                total_chunks += result.chunks
+
+    typer.echo(f"Done. Total chunks: {total_chunks}")
 
 
 if __name__ == "__main__":

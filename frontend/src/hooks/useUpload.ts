@@ -1,8 +1,10 @@
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ingestDocuments } from "../api/client";
 import type { IngestResult } from "../types/api";
 
 export function useUpload(identityId: string | null) {
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -15,13 +17,15 @@ export function useUpload(identityId: string | null) {
       try {
         const res = await ingestDocuments(files, identityId, target);
         setResult(res);
+        await queryClient.invalidateQueries({ queryKey: ["documents"] });
+        await queryClient.invalidateQueries({ queryKey: ["ingest-jobs"] });
       } catch (e) {
         setError(String(e));
       } finally {
         setBusy(false);
       }
     },
-    [identityId]
+    [identityId, queryClient]
   );
 
   const reset = useCallback(() => {

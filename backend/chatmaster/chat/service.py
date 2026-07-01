@@ -76,7 +76,13 @@ async def stream_chat_events(
 
         state["answer"] = "".join(answer_parts)
         active_runtime.persist(state)
-        yield StreamEvent(type="done", data={"message_id": str(uuid.uuid4())})
+        yield StreamEvent(
+            type="done",
+            data={
+                "message_id": str(uuid.uuid4()),
+                "conversation_id": conversation_id,
+            },
+        )
     except Exception as exc:  # noqa: BLE001 - stream errors must stay in-band
         yield StreamEvent(type="error", data={"detail": str(exc)})
 

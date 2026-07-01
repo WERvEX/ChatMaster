@@ -4,7 +4,7 @@ import type { ChatRequest, SourceItem } from "../types/api";
 export interface ChatStreamCallbacks {
   onSources: (sources: SourceItem[]) => void;
   onToken: (delta: string) => void;
-  onDone: (messageId: string) => void;
+  onDone: (payload: { message_id: string; conversation_id?: string }) => void;
   onError: (detail: string) => void;
 }
 
@@ -30,7 +30,10 @@ export function streamChat(req: ChatRequest, cb: ChatStreamCallbacks): AbortCont
           cb.onToken(data.delta ?? "");
           break;
         case "done":
-          cb.onDone(data.message_id ?? "");
+          cb.onDone({
+            message_id: data.message_id ?? "",
+            conversation_id: data.conversation_id,
+          });
           break;
         case "error":
           cb.onError(data.detail ?? "unknown error");

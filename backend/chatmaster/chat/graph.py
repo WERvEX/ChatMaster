@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 
 from chatmaster.ai.models import build_chat_model, build_embeddings
 from chatmaster.ai.prompts import build_prompt, format_context
-from chatmaster.db.models import Message
+from chatmaster.conversations.service import load_history as load_history_from_db
+from chatmaster.db.models import Conversation, Message, utc_now
+from chatmaster.db.session import SessionLocal
 from chatmaster.identities.loader import get_registry
 from chatmaster.identities.schema import IdentityConfig
 from chatmaster.retrieval.retriever import retrieve
@@ -60,10 +62,23 @@ async def default_stream_answer(state: ChatState) -> AsyncIterator[str]:
 @dataclass
 class ChatRuntime:
     load_identity: Callable[[str], IdentityConfig]
-    load_history: Callable[[str | None, list[dict[str, str]]], list[dict[str, str]]]
+    load_history: Callable[[str | None, str, list[dict[str, str]]], list[dict[str, str]]]
     retrieve: Callable[[IdentityConfig, str], list[RetrievedChunk] | Any]
     stream_answer: Callable[[ChatState], AsyncIterator[str]]
     persist: Callable[[ChatState], None]
+
+
+def _db_load_history(
+    conversation_id: str | None,
+    workspace_id: str,
+    provided_history: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    if not conversation_id:
+        return provided_history
+    with SessionLocal() as db:
+        return load_history_from_db(
+            db, workspace_id=workspace_id, conversation_id=conversation_id
+        )
 
 
 def default_runtime() -> ChatRuntime:
@@ -73,7 +88,7 @@ def default_runtime() -> ChatRuntime:
 
     return ChatRuntime(
         load_identity=lambda identity_id: get_registry().get(identity_id),
-        load_history=lambda _conversation_id, provided_history: provided_history,
+        load_history=_db_load_history,
         retrieve=retrieve_chunks,
         stream_answer=default_stream_answer,
         persist=lambda _state: None,
@@ -90,6 +105,7 @@ def build_chat_graph(runtime: ChatRuntime):
         return {
             "history": runtime.load_history(
                 state.get("conversation_id"),
+                state["workspace_id"],
                 state.get("history", []),
             )
         }
@@ -153,5 +169,8 @@ def persist_messages(db: Session, state: ChatState) -> None:
         sources_json=state.get("sources", []),
     )
     db.add_all([user_message, assistant_message])
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is not None:
+        conversation.updated_at = utc_now()
     db.commit()
 

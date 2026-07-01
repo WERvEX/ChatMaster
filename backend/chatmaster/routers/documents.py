@@ -17,7 +17,7 @@ from chatmaster.documents.service import (
     list_documents,
     list_ingest_jobs,
 )
-from chatmaster.identities.loader import get_registry
+from chatmaster.identities.loader import IdentityNotFound, get_registry
 from chatmaster.schemas.api import DocumentOut, IngestJobOut, IngestResult
 
 router = APIRouter(tags=["documents"])
@@ -33,6 +33,11 @@ async def ingest_documents(
 ):
     if target not in {"private", "common"}:
         raise HTTPException(status_code=400, detail="target must be 'private' or 'common'")
+
+    try:
+        get_registry().get(identity_id)
+    except IdentityNotFound:
+        raise HTTPException(status_code=404, detail=f"Identity '{identity_id}' not found") from None
 
     settings = get_settings()
     file_results = []
@@ -55,6 +60,8 @@ async def ingest_documents(
             )
         except UnsupportedDocumentType as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except IdentityNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         file_results.append(result)
 
     return IngestResult(

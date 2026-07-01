@@ -21,6 +21,10 @@ env/
 providers.json
 backend/data/providers.json
 
+# Local runtime data
+backend/data/*.db
+backend/data/storage/
+
 # Qdrant local storage
 qdrant_data/
 qdrant_storage/
@@ -39,5 +43,6 @@ Thumbs.db
 
 # Test / coverage
 .pytest_cache/
+.pytest_tmp/
 .coverage
 htmlcov/

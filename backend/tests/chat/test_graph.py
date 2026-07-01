@@ -45,7 +45,7 @@ async def test_chat_service_emits_sources_before_tokens() -> None:
 
     runtime = ChatRuntime(
         load_identity=lambda _identity_id: _identity(),
-        load_history=lambda _conversation_id, provided_history: provided_history,
+        load_history=lambda _conversation_id, _workspace_id, provided_history: provided_history,
         retrieve=lambda _identity, _message: [_chunk()],
         stream_answer=stream_answer,
         persist=lambda _state: None,
@@ -109,7 +109,7 @@ async def test_chat_graph_persists_messages_when_conversation_id_is_present() ->
 
     runtime = ChatRuntime(
         load_identity=lambda _identity_id: _identity(),
-        load_history=lambda _conversation_id, provided_history: provided_history,
+        load_history=lambda _conversation_id, _workspace_id, provided_history: provided_history,
         retrieve=lambda _identity, _message: [_chunk()],
         stream_answer=stream_answer,
         persist=persist,
@@ -138,6 +138,58 @@ async def test_chat_graph_persists_messages_when_conversation_id_is_present() ->
 
 
 @pytest.mark.asyncio
+async def test_load_history_reads_messages_from_database() -> None:
+    from chatmaster.chat.graph import _db_load_history
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    test_session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    with test_session() as db:
+        db.add(Workspace(id="local", name="Local Workspace"))
+        db.add(
+            Conversation(
+                id="conversation-1",
+                workspace_id="local",
+                identity_id="legal_expert",
+                title="历史",
+            )
+        )
+        db.add(
+            Message(
+                id="message-1",
+                workspace_id="local",
+                conversation_id="conversation-1",
+                role="user",
+                content="第一条",
+            )
+        )
+        db.add(
+            Message(
+                id="message-2",
+                workspace_id="local",
+                conversation_id="conversation-1",
+                role="assistant",
+                content="第二条",
+            )
+        )
+        db.commit()
+
+    import chatmaster.chat.graph as graph_module
+
+    original = graph_module.SessionLocal
+    graph_module.SessionLocal = test_session
+    try:
+        history = _db_load_history("conversation-1", "local", [])
+    finally:
+        graph_module.SessionLocal = original
+
+    assert history == [
+        {"role": "user", "content": "第一条"},
+        {"role": "assistant", "content": "第二条"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_chat_service_returns_error_event_for_unknown_identity() -> None:
     from chatmaster.chat.graph import ChatRuntime
     from chatmaster.chat.service import stream_chat_events
@@ -150,7 +202,7 @@ async def test_chat_service_returns_error_event_for_unknown_identity() -> None:
 
     runtime = ChatRuntime(
         load_identity=missing_identity,
-        load_history=lambda _conversation_id, provided_history: provided_history,
+        load_history=lambda _conversation_id, _workspace_id, provided_history: provided_history,
         retrieve=lambda _identity, _message: [],
         stream_answer=stream_answer,
         persist=lambda _state: None,
