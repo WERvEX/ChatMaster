@@ -49,3 +49,6 @@ htmlcov/
 
 # Documentation build/output
 docs/
+
+# Reasonix agent workspace
+.reasonix/
