@@ -3,6 +3,7 @@ import {
   createConversation,
   deleteConversation,
   getConversations,
+  updateConversation,
 } from "../api/client";
 import type { ConversationOut } from "../types/api";
 
@@ -119,6 +120,19 @@ export function useConversations(identityId: string | null) {
     await removeConversation(activeId);
   }, [activeId, removeConversation]);
 
+  const renameConversation = useCallback(async (conversationId: string, title: string) => {
+    setError(null);
+    try {
+      const updated = await updateConversation(conversationId, title);
+      setConversations((items) =>
+        items.map((item) => (item.id === updated.id ? updated : item))
+      );
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, []);
+
   return {
     conversations,
     activeId,
@@ -129,6 +143,7 @@ export function useConversations(identityId: string | null) {
     startConversation,
     removeConversation,
     deleteActiveConversation,
+    renameConversation,
     setActiveId,
   };
 }

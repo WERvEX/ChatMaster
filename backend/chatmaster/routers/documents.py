@@ -18,7 +18,7 @@ from chatmaster.documents.service import (
     retry_ingest_job,
     submit_upload,
 )
-from chatmaster.identities.loader import IdentityNotFound, get_registry
+from chatmaster.identities.service import IdentityNotFound, get_identity_model
 from chatmaster.schemas.api import (
     DocumentOut,
     IndexRebuildRequest,
@@ -49,7 +49,7 @@ async def ingest_documents(
         if not identity_id:
             raise HTTPException(status_code=400, detail="identity_id is required")
         try:
-            get_registry().get(identity_id)
+            get_identity_model(db, workspace_id=workspace_id, identity_id=identity_id)
         except IdentityNotFound:
             raise HTTPException(
                 status_code=404, detail=f"Identity '{identity_id}' not found"

@@ -16,7 +16,7 @@ from chatmaster.ai.prompts import build_prompt, format_context
 from chatmaster.conversations.service import load_history as load_history_from_db
 from chatmaster.db.models import Conversation, Message, utc_now
 from chatmaster.db.session import SessionLocal
-from chatmaster.identities.loader import get_registry
+from chatmaster.identities.service import get_identity_config
 from chatmaster.identities.schema import IdentityConfig
 from chatmaster.retrieval.retriever import retrieve
 from chatmaster.retrieval.schemas import RetrievedChunk
@@ -90,7 +90,7 @@ def default_runtime() -> ChatRuntime:
             return await retrieve(identity, message, embeddings, db=db, workspace_id=workspace_id)
 
     return ChatRuntime(
-        load_identity=lambda identity_id: get_registry().get(identity_id),
+        load_identity=lambda identity_id: get_identity_config(identity_id),
         load_history=_db_load_history,
         retrieve=retrieve_chunks,
         stream_answer=default_stream_answer,

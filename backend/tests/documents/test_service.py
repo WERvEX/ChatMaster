@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from chatmaster.db.base import Base
-from chatmaster.db.models import Document, IngestJob, Workspace
+from chatmaster.db.models import Document, Identity, IngestJob, Workspace
 
 
 def _session() -> Session:
@@ -17,6 +17,22 @@ def _session() -> Session:
     return SessionLocal()
 
 
+def _seed_identity(db: Session) -> None:
+    db.add(Workspace(id="local", name="Local Workspace"))
+    db.add(
+        Identity(
+            id="legal_expert",
+            workspace_id="local",
+            slug="legal_expert",
+            name="Legal",
+            description="",
+            system_prompt="",
+            private_collection="chatmaster_legal_expert",
+        )
+    )
+    db.commit()
+
+
 def test_ingest_uploaded_document_creates_document_and_job(tmp_path: Path) -> None:
     from chatmaster.documents.service import ingest_uploaded_document
 
@@ -24,8 +40,7 @@ def test_ingest_uploaded_document_creates_document_and_job(tmp_path: Path) -> No
         return 3
 
     with _session() as db:
-        db.add(Workspace(id="local", name="Local Workspace"))
-        db.commit()
+        _seed_identity(db)
 
         result = ingest_uploaded_document(
             db=db,
@@ -57,8 +72,7 @@ def test_ingest_uploaded_document_marks_failed_job_on_ingest_error(tmp_path: Pat
         raise RuntimeError("embedding failed")
 
     with _session() as db:
-        db.add(Workspace(id="local", name="Local Workspace"))
-        db.commit()
+        _seed_identity(db)
 
         result = ingest_uploaded_document(
             db=db,
@@ -98,8 +112,7 @@ def test_default_ingest_marks_document_failed_when_inner_ingest_reports_an_error
 
     monkeypatch.setattr(service, "ingest", failed_ingest)
     with _session() as db:
-        db.add(Workspace(id="local", name="Local Workspace"))
-        db.commit()
+        _seed_identity(db)
 
         result = service.ingest_uploaded_document(
             db=db,

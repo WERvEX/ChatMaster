@@ -1,4 +1,4 @@
-"""Seed local workspace data from settings and identity YAML."""
+"""Seed local workspace data from settings and identity YAML once."""
 
 from __future__ import annotations
 
@@ -66,16 +66,36 @@ def seed_local_data(
                 embedding_model=cfg.embedding_model,
                 retrieval_config_json=cfg.retrieval.model_dump(),
                 is_active=True,
+                is_system=False,
             )
             db.add(identity)
-        else:
-            identity.name = cfg.name
-            identity.description = cfg.description
-            identity.system_prompt = cfg.system_prompt
-            identity.private_collection = cfg.private_collection
-            identity.generation_model = cfg.generation_model
-            identity.embedding_model = cfg.embedding_model
-            identity.retrieval_config_json = cfg.retrieval.model_dump()
-            identity.is_active = True
+
+    fallback = db.get(Identity, "general_assistant")
+    if fallback is None:
+        db.add(
+            Identity(
+                id="general_assistant",
+                workspace_id=settings.local_workspace_id,
+                slug="general_assistant",
+                name="通用助手",
+                description="随时待命的通用 AI 助手。",
+                system_prompt=(
+                    "你是一位可靠、清晰、友善的通用 AI 助手。"
+                    "优先准确回答问题；信息不足时明确说明，并给出可执行的下一步。"
+                ),
+                avatar_url="/default-assistant.png",
+                private_collection="chatmaster_general_assistant",
+                generation_model=None,
+                embedding_model=None,
+                retrieval_config_json={
+                    "top_k": 6,
+                    "private_weight": 0.0,
+                    "common_weight": 1.0,
+                    "min_chunks_common": 2,
+                },
+                is_active=True,
+                is_system=True,
+            )
+        )
 
     db.commit()

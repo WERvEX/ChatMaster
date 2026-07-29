@@ -18,7 +18,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from chatmaster.config import get_settings
-from chatmaster.identities.loader import get_registry
 from chatmaster.routers import chat, conversations, documents, health, identities, providers
 
 logger = logging.getLogger("chatmaster")
@@ -44,9 +43,18 @@ async def lifespan(app: FastAPI):
             .values(status="stopped")
         )
         db.commit()
-    registry = get_registry()  # validates identities.yaml, fails fast on typos
+    with SessionLocal() as db:
+        from chatmaster.identities.service import list_identity_models
 
-    logger.info("Identities: %s", [i.id for i in registry.list_all()])
+        identity_ids = [
+            item.id
+            for item in list_identity_models(
+                db,
+                workspace_id=settings.local_workspace_id,
+                include_archived=True,
+            )
+        ]
+    logger.info("Identities: %s", identity_ids)
     from chatmaster.documents.jobs import resume_pending_jobs
 
     resumed = resume_pending_jobs()

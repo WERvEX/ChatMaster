@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from chatmaster.conversations.service import ConversationNotFound, get_conversation
 from chatmaster.core.auth import get_current_user_id, get_current_workspace_id
 from chatmaster.db.session import get_db
-from chatmaster.identities.loader import IdentityNotFound, get_registry
+from chatmaster.identities.service import IdentityNotFound, get_identity_model
 from chatmaster.schemas.api import ChatRequest
 from chatmaster.chat.service import request_cancel, stream_chat
 
@@ -30,7 +30,7 @@ async def chat(
 ):
     # Validate identity up front so a 404 is returned cleanly (not as an SSE error).
     try:
-        get_registry().get(req.identity_id)
+        get_identity_model(db, workspace_id=workspace_id, identity_id=req.identity_id)
     except IdentityNotFound:
         raise HTTPException(status_code=404, detail=f"Identity '{req.identity_id}' not found")
     if req.conversation_id:

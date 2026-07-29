@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from chatmaster.db.models import Conversation, Message
-from chatmaster.identities.loader import get_registry
+from chatmaster.identities.service import get_identity_model
 
 
 class ConversationNotFound(KeyError):
@@ -22,7 +22,7 @@ def create_conversation(
     identity_id: str,
     title: str | None = None,
 ) -> Conversation:
-    get_registry().get(identity_id)  # raises IdentityNotFound
+    get_identity_model(db, workspace_id=workspace_id, identity_id=identity_id)
     conversation = Conversation(
         id=str(uuid.uuid4()),
         workspace_id=workspace_id,
@@ -99,6 +99,24 @@ def delete_conversation(db: Session, *, workspace_id: str, conversation_id: str)
     conversation = get_conversation(db, workspace_id=workspace_id, conversation_id=conversation_id)
     db.delete(conversation)
     db.commit()
+
+
+def update_conversation(
+    db: Session,
+    *,
+    workspace_id: str,
+    conversation_id: str,
+    title: str,
+) -> Conversation:
+    conversation = get_conversation(
+        db,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+    )
+    conversation.title = title.strip()
+    db.commit()
+    db.refresh(conversation)
+    return conversation
 
 
 def title_from_message(message: str, max_len: int = 30) -> str:

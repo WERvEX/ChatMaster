@@ -125,7 +125,7 @@ def save_provider_config(cfg: ProvidersConfig, workspace_id: str | None = None) 
                 from sqlalchemy import update
 
                 from chatmaster.db.models import IndexVersion
-                from chatmaster.identities.loader import get_registry
+                from chatmaster.identities.service import list_identity_models
 
                 db.execute(
                     update(IndexVersion)
@@ -148,7 +148,11 @@ def save_provider_config(cfg: ProvidersConfig, workspace_id: str | None = None) 
                     ("common", None, settings.common_collection),
                     *[
                         ("private", identity.id, identity.private_collection)
-                        for identity in get_registry().list_all()
+                        for identity in list_identity_models(
+                            db,
+                            workspace_id=workspace_id or settings.local_workspace_id,
+                            include_archived=True,
+                        )
                     ],
                 ]
                 for namespace, identity_id, logical_name in scopes:

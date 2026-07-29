@@ -6,6 +6,7 @@ import type { Message } from "../../types/api";
 interface Options {
   conversationId: string | null;
   onConversationId: (id: string) => void;
+  onTurnDone?: () => void;
 }
 
 interface ActiveStream {
@@ -15,7 +16,7 @@ interface ActiveStream {
 }
 
 export function useChat(identityId: string | null, options: Options) {
-  const { conversationId, onConversationId } = options;
+  const { conversationId, onConversationId, onTurnDone } = options;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +146,7 @@ export function useChat(identityId: string | null, options: Options) {
               skipHistoryLoadFor.current = payload.conversation_id;
               onConversationId(payload.conversation_id);
             }
+            onTurnDone?.();
           },
           onError: (detail) => {
             if (activeRef.current?.key !== streamKey) return;
@@ -163,7 +165,7 @@ export function useChat(identityId: string | null, options: Options) {
       );
       activeRef.current = { key: streamKey, requestId, ctrl };
     },
-    [conversationId, identityId, isStreaming, onConversationId]
+    [conversationId, identityId, isStreaming, onConversationId, onTurnDone]
   );
 
   const stop = useCallback(() => {

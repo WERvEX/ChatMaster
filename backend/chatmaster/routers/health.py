@@ -6,9 +6,8 @@ from fastapi import APIRouter
 from sqlalchemy import select, text
 
 from chatmaster.ai.providers import get_provider_config
-from chatmaster.db.models import IndexVersion
+from chatmaster.db.models import Identity, IndexVersion
 from chatmaster.db.session import SessionLocal
-from chatmaster.identities.loader import get_registry
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -27,6 +26,13 @@ async def health():
             stale = db.scalars(
                 select(IndexVersion.id).where(IndexVersion.status == "stale")
             ).first()
+            identity_ids = list(
+                db.scalars(
+                    select(Identity.id).where(
+                        Identity.is_active.is_(True),
+                    )
+                )
+            )
         checks["database"] = {"status": "ok"}
         checks["indexes"] = {
             "status": "degraded" if stale else "ok",
@@ -55,5 +61,5 @@ async def health():
     return {
         "status": overall,
         "checks": checks,
-        "identities": [item.id for item in get_registry().list_all()],
+        "identities": identity_ids if "identity_ids" in locals() else [],
     }

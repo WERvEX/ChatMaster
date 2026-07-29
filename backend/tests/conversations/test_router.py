@@ -58,6 +58,13 @@ def test_conversation_crud_flow() -> None:
     conversation_id = create_resp.json()["id"]
     assert create_resp.json()["title"] == "测试会话"
 
+    rename_resp = client.put(
+        f"/api/conversations/{conversation_id}",
+        json={"title": "新的标题"},
+    )
+    assert rename_resp.status_code == 200
+    assert rename_resp.json()["title"] == "新的标题"
+
     list_resp = client.get("/api/conversations", params={"identity_id": "legal_expert"})
     assert list_resp.status_code == 200
     assert list_resp.json()[0]["id"] == conversation_id

@@ -1,4 +1,14 @@
-import { useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  FileText,
+  Layers3,
+  ListFilter,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   deleteDocument,
@@ -21,6 +31,9 @@ export function KnowledgePage({ identityId, onBack }: Props) {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>("documents");
   const [scope, setScope] = useState<"all" | "private" | "common">("all");
   const [statusFilter, setStatusFilter] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const documents = useQuery({
     queryKey: ["documents", identityId, scope, statusFilter],
     queryFn: () =>
@@ -50,9 +63,17 @@ export function KnowledgePage({ identityId, onBack }: Props) {
   };
 
   const remove = async (documentId: string) => {
-    if (!window.confirm("确定删除该文档及其全部向量吗？")) return;
-    await deleteDocument(documentId);
-    await Promise.all([documents.refetch(), jobs.refetch()]);
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await deleteDocument(documentId);
+      setDeletingId(null);
+      await Promise.all([documents.refetch(), jobs.refetch()]);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "删除失败，请稍后重试。");
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   const rebuild = async (target: "private" | "common") => {
@@ -101,26 +122,54 @@ export function KnowledgePage({ identityId, onBack }: Props) {
 
         {activeTab === "documents" && (
           <section className="knowledge-section">
-          <h3>文档</h3>
-          <div className="settings-actions">
-            <select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}>
-              <option value="all">全部范围</option>
-              <option value="private">当前身份私有库</option>
-              <option value="common">共享库</option>
-            </select>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="">全部状态</option>
-              <option value="pending">等待中</option>
-              <option value="ingesting">处理中</option>
-              <option value="indexed">已完成</option>
-              <option value="failed">失败</option>
-            </select>
+          <div className="knowledge-section-heading">
+            <div>
+              <h3>文档</h3>
+              <p>管理当前人格的私有资料与所有人格可用的共享资料。</p>
+            </div>
+            <span className="knowledge-result-count">{documents.data?.length ?? 0} 个文档</span>
+          </div>
+          <div className="knowledge-toolbar" aria-label="文档筛选">
+            <label className="knowledge-filter">
+              <span className="knowledge-filter-label"><Layers3 size={14} />知识范围</span>
+              <span className="knowledge-select-shell">
+                <select
+                  aria-label="知识范围"
+                  value={scope}
+                  onChange={(event) => setScope(event.target.value as typeof scope)}
+                >
+                  <option value="all">全部范围</option>
+                  <option value="private">当前身份私有库</option>
+                  <option value="common">共享库</option>
+                </select>
+                <ChevronDown aria-hidden="true" size={15} />
+              </span>
+            </label>
+            <label className="knowledge-filter">
+              <span className="knowledge-filter-label"><ListFilter size={14} />处理状态</span>
+              <span className="knowledge-select-shell">
+                <select
+                  aria-label="处理状态"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                >
+                  <option value="">全部状态</option>
+                  <option value="pending">等待中</option>
+                  <option value="ingesting">处理中</option>
+                  <option value="indexed">已完成</option>
+                  <option value="failed">失败</option>
+                </select>
+                <ChevronDown aria-hidden="true" size={15} />
+              </span>
+            </label>
           </div>
           {documents.isLoading && <div className="muted">加载中…</div>}
           {documents.error && <div className="error">{String(documents.error)}</div>}
+          {deleteError && <div className="knowledge-inline-error">{deleteError}</div>}
           {documents.data?.length === 0 && <div className="empty-state">暂无文档</div>}
           {documents.data && documents.data.length > 0 && (
-            <table className="data-table">
+            <div className="knowledge-table-shell">
+            <table className="data-table knowledge-table">
               <thead>
                 <tr>
                   <th>文件</th>
@@ -132,20 +181,78 @@ export function KnowledgePage({ identityId, onBack }: Props) {
               </thead>
               <tbody>
                 {documents.data.map((doc) => (
-                  <tr key={doc.id}>
-                    <td>{doc.filename}</td>
-                    <td>{doc.namespace === "common" ? "共享" : "私有"}</td>
-                    <td>{doc.status === "indexed" ? "已完成" : doc.status}</td>
-                    <td>{new Date(doc.created_at).toLocaleString()}</td>
-                    <td>
-                      <button className="btn-link danger-link" onClick={() => void remove(doc.id)}>
-                        删除
-                      </button>
-                    </td>
-                  </tr>
+                  <Fragment key={doc.id}>
+                    <tr>
+                      <td>
+                        <span className="knowledge-file">
+                          <span className="knowledge-file-icon"><FileText size={16} /></span>
+                          <span>{doc.filename}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`knowledge-badge ${doc.namespace === "common" ? "common" : "private"}`}>
+                          {doc.namespace === "common" ? "共享" : "私有"}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`knowledge-badge status-${doc.status}`}>
+                          {doc.status === "indexed" ? "已完成" : doc.status}
+                        </span>
+                      </td>
+                      <td className="knowledge-time">{new Date(doc.created_at).toLocaleString()}</td>
+                      <td>
+                        <button
+                          className="knowledge-delete-button"
+                          type="button"
+                          aria-label={`删除 ${doc.filename}`}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeletingId(doc.id);
+                          }}
+                        >
+                          <Trash2 size={15} />
+                          <span>删除</span>
+                        </button>
+                      </td>
+                    </tr>
+                    {deletingId === doc.id && (
+                      <tr className="knowledge-delete-row">
+                        <td colSpan={5}>
+                          <div className="knowledge-delete-confirm" role="alert">
+                            <span className="knowledge-delete-warning"><AlertTriangle size={18} /></span>
+                            <span className="knowledge-delete-copy">
+                              <strong>删除“{doc.filename}”及其全部向量？</strong>
+                              <small>此操作不可恢复，其他文档不会受到影响。</small>
+                            </span>
+                            <span className="knowledge-delete-actions">
+                              <button
+                                className="knowledge-cancel-button"
+                                type="button"
+                                disabled={deleteBusy}
+                                onClick={() => setDeletingId(null)}
+                              >
+                                <X size={15} />
+                                取消
+                              </button>
+                              <button
+                                className="knowledge-confirm-delete"
+                                type="button"
+                                disabled={deleteBusy}
+                                onClick={() => void remove(doc.id)}
+                              >
+                                <Check size={15} />
+                                {deleteBusy ? "删除中…" : "确认删除"}
+                              </button>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </section>
         )}

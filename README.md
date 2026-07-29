@@ -1,6 +1,6 @@
 # ChatMaster
 
-一个多身份（multi-identity）的 AI 聊天智能体。每个身份（法律专家 / 情感大师 / 职业 prompt 工程师，……）都基于**自己的 RAG 知识库**回答问题，支持流式输出与引用来源。身份是「配置即数据」——新增身份只需改一个 YAML 文件，无需写代码。
+一个多人格（multi-persona）的 AI 聊天智能体。每个人格（法律专家 / 情感大师 / 职业 prompt 工程师，……）都可以基于**自己的 RAG 知识库**回答问题，支持流式输出与引用来源。人格可直接在网页中创建、编辑、复制、归档与恢复，无需修改代码或重启服务。
 
 RAG 对话工作流使用 [LangGraph](https://langchain-ai.github.io/langgraph/)，HTTP 层使用 FastAPI，业务数据使用 SQLite，向量库使用 Qdrant，前端是 React + Vite。**API 配置（对话模型 / 向量模型的 base_url、key、模型名）可在 Web 页面运行时自定义**，无需改代码或重启。
 
@@ -14,7 +14,9 @@ RAG 对话工作流使用 [LangGraph](https://langchain-ai.github.io/langgraph/)
 - **可靠流式对话**：SSE 逐 token 输出，支持停止、幂等 request_id、持久化部分回答与逐消息引用来源。
 - **API 配置可视化**：内置「API 配置」页面，可填入任意 OpenAI 兼容服务（DeepSeek / Moonshot / OpenAI……）或 Anthropic，以及向量模型（本地 HuggingFace / OpenAI 兼容），并带「测试连接」按钮。
 - **知识库管理**：支持 CLI 批量导入 + Web 后台上传、失败重试、删除与非破坏式索引重建。
-- **配置即数据**：身份、system prompt、检索参数全部写在 `identities.yaml`。
+- **网页人格管理**：名称、头像、system prompt、模型覆盖和检索参数持久化到 SQLite；`identities.yaml` 仅用于首次初始化默认人格。
+- **独立会话空间**：每个会话固定绑定一个人格，切换人格时恢复该人格最近使用的会话，避免上下文与私有知识库混用。
+- **ChatGPT 风格网页**：可折叠会话侧边栏、移动端抽屉、会话自动命名/重命名/删除，以及位于聊天页顶部的人格选择器。
 - **LangGraph-ready**：AI 层按 retrieve → augment → generate 切分，后续可平滑迁移到 `StateGraph`。
 
 ---
@@ -50,7 +52,8 @@ ChatMaster/
 │       ├── identities/
 │       │   ├── schema.py           # IdentityConfig / RetrievalConfig
 │       │   ├── loader.py           # YAML 加载 + 校验 + registry
-│       │   └── identities.yaml     # ← 身份定义（可扩展）
+│       │   ├── service.py          # 数据库人格 CRUD、归档、恢复与运行时加载
+│       │   └── identities.yaml     # 仅首次启动时导入的默认人格种子
 │       ├── ai/                     # LangChain AI 层（无 FastAPI 依赖）
 │       │   ├── providers.py        # 运行时可自定义的 provider 配置（持久化）
 │       │   ├── models.py           # build_chat_model / build_embeddings 工厂
@@ -148,7 +151,7 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-打开页面 → 选择身份 → 在侧边栏点「⚙ API 配置」填好 base_url / key / 模型 → 保存（可点「测试连接」）→ 回到对话即可聊天。
+打开页面 → 在顶部选择人格 → 在侧边栏点「API 配置」填好 base_url / key / 模型 → 保存（可点「测试连接」）→ 回到对话即可聊天。需要新增或修改人格时，使用侧边栏底部的「人格管理」。
 
 ### 6. 命令行快速验证（可选）
 
@@ -189,12 +192,14 @@ chatmaster-rebuild-index --identity legal_expert --confirm
 
 ## 🧩 扩展指南
 
-### 新增身份（无需写代码）
+### 新增人格（无需写代码）
 
-1. 在 `backend/chatmaster/identities/identities.yaml` 追加一个条目（id / name / system_prompt / private_collection / retrieval）。
-2. 重启后端——lifespan 会自动创建新的私有集合。
-3. 导入文档：CLI 或网页上传。
-4. 身份立即出现在选择器里。
+1. 打开网页侧边栏底部的「人格管理」。
+2. 点击「创建新人格」，填写名称、简介、System Prompt；头像为可选项。
+3. 如有需要，展开高级设置配置聊天模型和私有/公共知识库检索权重。
+4. 保存后立即出现在聊天页顶部的人格选择器中，无需重启。
+
+人格采用归档而非物理删除：归档后会话和私有知识库保持不变，恢复后可继续使用。系统级「通用助手」始终可用，只检索公共知识库；因此用户创建的人格可以全部归档。
 
 ### 切换模型
 
@@ -215,10 +220,16 @@ chatmaster-rebuild-index --identity legal_expert --confirm
 | GET | `/api/health` | 健康检查：当前 provider 配置、集合、身份 |
 | GET | `/api/identities` | 身份列表（不含 system prompt） |
 | GET | `/api/identities/{id}` | 单个身份详情 |
+| POST | `/api/identities` | 创建人格 |
+| PUT | `/api/identities/{id}` | 修改人格 |
+| POST | `/api/identities/{id}/archive` | 归档人格 |
+| POST | `/api/identities/{id}/restore` | 恢复人格 |
+| POST | `/api/identities/{id}/duplicate` | 复制人格 |
 | POST | `/api/chat` | SSE 流式对话 |
 | POST | `/api/conversations` | 创建会话 |
 | GET | `/api/conversations` | 会话列表 |
 | GET | `/api/conversations/{id}/messages` | 会话消息 |
+| PUT | `/api/conversations/{id}` | 重命名会话 |
 | DELETE | `/api/conversations/{id}` | 删除会话 |
 | POST | `/api/documents/ingest` | 提交后台文档导入任务（202） |
 | POST | `/api/ingest-jobs/{id}/retry` | 重试失败导入 |

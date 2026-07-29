@@ -11,11 +11,12 @@ from chatmaster.conversations.service import (
     delete_conversation,
     list_conversations,
     list_messages,
+    update_conversation,
 )
 from chatmaster.core.auth import get_current_workspace_id
 from chatmaster.db.session import get_db
-from chatmaster.identities.loader import IdentityNotFound
-from chatmaster.schemas.api import ConversationCreate, ConversationOut, MessageOut
+from chatmaster.identities.service import IdentityNotFound
+from chatmaster.schemas.api import ConversationCreate, ConversationOut, ConversationUpdate, MessageOut
 
 router = APIRouter(tags=["conversations"])
 
@@ -65,6 +66,24 @@ def get_conversation_messages(
         return list_messages(db, workspace_id=workspace_id, conversation_id=conversation_id)[
             offset : offset + limit
         ]
+    except ConversationNotFound:
+        raise HTTPException(status_code=404, detail="Conversation not found") from None
+
+
+@router.put("/api/conversations/{conversation_id}", response_model=ConversationOut)
+def put_conversation(
+    conversation_id: str,
+    body: ConversationUpdate,
+    workspace_id: str = Depends(get_current_workspace_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return update_conversation(
+            db,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            title=body.title,
+        )
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
 

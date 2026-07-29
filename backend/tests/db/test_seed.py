@@ -23,7 +23,7 @@ def _session() -> Session:
     return SessionLocal()
 
 
-def test_seed_local_data_upserts_workspace_user_and_yaml_identities(tmp_path: Path) -> None:
+def test_seed_local_data_inserts_workspace_user_yaml_identities_and_fallback(tmp_path: Path) -> None:
     from chatmaster.db.seed import seed_local_data
 
     identities_yaml = tmp_path / "identities.yaml"
@@ -53,6 +53,10 @@ identities:
         assert db.get(User, "local-user") is not None
 
         identities = db.query(Identity).all()
-        assert len(identities) == 1
-        assert identities[0].slug == "legal_expert"
-        assert identities[0].retrieval_config_json["top_k"] == 6
+        assert len(identities) == 2
+        legal = next(item for item in identities if item.id == "legal_expert")
+        fallback = next(item for item in identities if item.id == "general_assistant")
+        assert legal.slug == "legal_expert"
+        assert legal.retrieval_config_json["top_k"] == 6
+        assert fallback.is_system is True
+        assert fallback.is_active is True

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from chatmaster.ai.loaders import SUPPORTED_EXTENSIONS
 from chatmaster.db.models import Document, DocumentChunk, IndexVersion, IngestJob
-from chatmaster.identities.loader import get_registry
+from chatmaster.identities.service import get_identity_model
 from chatmaster.schemas.api import IngestFileResult, IngestSubmissionItem
 from chatmaster.services.ingest_service import ingest
 
@@ -81,7 +81,7 @@ def ingest_path_document(
     if target == "private":
         if not identity_id:
             raise ValueError("identity_id is required for private ingestion")
-        get_registry().get(identity_id)
+        get_identity_model(db, workspace_id=workspace_id, identity_id=identity_id)
 
     path = Path(source_path)
     name = filename or path.name
@@ -256,7 +256,7 @@ async def submit_upload(
     if target == "private":
         if not identity_id:
             raise ValueError("identity_id is required for private ingestion")
-        get_registry().get(identity_id)
+        get_identity_model(db, workspace_id=workspace_id, identity_id=identity_id)
     filename = Path(upload.filename or "uploaded").name
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:

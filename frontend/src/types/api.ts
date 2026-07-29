@@ -9,7 +9,25 @@ export interface IdentityOut {
   id: string;
   name: string;
   description: string;
-  generation_model: string;
+  avatar_url: string | null;
+  generation_model: string | null;
+  retrieval: RetrievalConfig;
+  is_archived: boolean;
+  is_system: boolean;
+}
+
+export interface IdentityDetail extends IdentityOut {
+  system_prompt: string;
+  embedding_model: string | null;
+}
+
+export interface IdentityPayload {
+  name: string;
+  description: string;
+  system_prompt: string;
+  avatar_url: string | null;
+  generation_model: string | null;
+  embedding_model: string | null;
   retrieval: RetrievalConfig;
 }
 

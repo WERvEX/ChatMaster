@@ -1,157 +1,204 @@
-import { useEffect, useState } from "react";
+import { Menu } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { useIdentities } from "./hooks/useIdentities";
-import { useConversations } from "./hooks/useConversations";
-import { useChat } from "./features/chat/useChat";
-import { IdentitySelector } from "./components/IdentitySelector";
-import { ChatWindow } from "./features/chat/ChatWindow";
-import { ChatInput } from "./features/chat/ChatInput";
+import { ConversationSidebar } from "./components/ConversationSidebar";
+import { PersonaManager } from "./components/PersonaManager";
+import { PersonaSelector } from "./components/PersonaSelector";
 import { ProviderSettings } from "./components/ProviderSettings";
+import { ChatInput } from "./features/chat/ChatInput";
+import { ChatWindow } from "./features/chat/ChatWindow";
+import { useChat } from "./features/chat/useChat";
 import { KnowledgePage } from "./features/knowledge/KnowledgePage";
+import { useConversations } from "./hooks/useConversations";
+import { useIdentities } from "./hooks/useIdentities";
+import type { IdentityDetail, IdentityPayload } from "./types/api";
 
-function formatWhen(iso: string) {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-}
+const SELECTED_IDENTITY_KEY = "chatmaster:selected-identity";
 
 export default function App() {
-  const { identities, loading, error } = useIdentities();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const identityStore = useIdentities();
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(SELECTED_IDENTITY_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [personaManager, setPersonaManager] = useState<"list" | "create" | null>(null);
+  const autoCreatingRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const activeIdentities = useMemo(
+    () => identityStore.identities.filter((item) => !item.is_archived),
+    [identityStore.identities]
+  );
+  const selectedIdentity =
+    activeIdentities.find((item) => item.id === selectedId) ??
+    activeIdentities.find((item) => item.is_system) ??
+    activeIdentities[0] ??
+    null;
+
+  useEffect(() => {
+    if (identityStore.loading || !selectedIdentity) return;
+    if (selectedIdentity.id !== selectedId) setSelectedId(selectedIdentity.id);
+  }, [identityStore.loading, selectedId, selectedIdentity]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    try {
+      localStorage.setItem(SELECTED_IDENTITY_KEY, selectedId);
+    } catch {
+      // Device-local preference only; private browsing can reject writes.
+    }
+  }, [selectedId]);
+
   const conversations = useConversations(selectedId);
   const chat = useChat(selectedId, {
     conversationId: conversations.activeId,
     onConversationId: (id) => {
       conversations.setActiveId(id);
-      if (selectedId) {
-        void conversations.refresh();
-      }
+      void conversations.refresh();
     },
+    onTurnDone: () => void conversations.refresh(),
   });
-  const isChatRoute = location.pathname === "/chat";
-  const isSettingsRoute = location.pathname === "/settings";
-  const isKnowledgeRoute = location.pathname === "/knowledge";
 
   useEffect(() => {
-    if (!loading && identities.length > 0 && !selectedId) {
-      setSelectedId(identities[0].id);
+    if (
+      !selectedId ||
+      conversations.loading ||
+      conversations.conversations.length > 0 ||
+      conversations.activeId ||
+      autoCreatingRef.current
+    ) {
+      return;
     }
-  }, [identities, loading, selectedId]);
+    autoCreatingRef.current = true;
+    void conversations.startConversation().finally(() => {
+      autoCreatingRef.current = false;
+    });
+  }, [
+    conversations.activeId,
+    conversations.conversations.length,
+    conversations.loading,
+    conversations.startConversation,
+    selectedId,
+  ]);
+
+  const activeRoute = location.pathname === "/knowledge"
+    ? "knowledge"
+    : location.pathname === "/settings"
+      ? "settings"
+      : "chat";
+
+  const go = (route: "chat" | "knowledge" | "settings") => {
+    navigate(`/${route}`);
+    setMobileSidebarOpen(false);
+  };
+
+  const createPersona = async (payload: IdentityPayload) => {
+    const created = await identityStore.create(payload) as IdentityDetail;
+    setSelectedId(created.id);
+    setPersonaManager(null);
+    navigate("/chat");
+    return created;
+  };
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <h1 className="brand">ChatMaster</h1>
-        <IdentitySelector
-          identities={identities}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            setSelectedId(id);
-            navigate("/chat");
-          }}
-          loading={loading}
-          error={error}
-        />
-        {selectedId && (
-          <section className="conversation-panel">
-            <div className="conversation-panel-header">
-              <span>会话</span>
-              <button
-                className="btn-link"
-                type="button"
-                onClick={() => conversations.setActiveId(null)}
-              >
-                新建
-              </button>
-            </div>
-            {conversations.loading && <div className="muted">加载会话…</div>}
-            {conversations.error && <div className="error">{conversations.error}</div>}
-            <ul className="conversation-list">
-              {conversations.conversations.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={`conversation-item ${
-                      conversations.activeId === item.id ? "active" : ""
-                    }`}
-                    onClick={() => conversations.selectConversation(item.id)}
-                  >
-                    <span className="conversation-title">{item.title}</span>
-                    <span className="conversation-time">{formatWhen(item.updated_at)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        <nav className="sidebar-nav" aria-label="主导航">
-          <button
-            className={`settings-toggle ${isChatRoute ? "active" : ""}`}
-            onClick={() => navigate("/chat")}
-          >
-            对话
-          </button>
-          <button
-            className={`settings-toggle ${isKnowledgeRoute ? "active" : ""}`}
-            onClick={() => navigate("/knowledge")}
-          >
-            知识库
-          </button>
-          <button
-            className={`settings-toggle ${isSettingsRoute ? "active" : ""}`}
-            onClick={() => navigate("/settings")}
-          >
-            API 配置
-          </button>
-        </nav>
-      </aside>
-
-      <Routes>
-        <Route path="/" element={<Navigate to="/chat" replace />} />
-        <Route path="/settings" element={<ProviderSettings onBack={() => navigate("/chat")} />} />
-        <Route
-          path="/knowledge"
-          element={<KnowledgePage identityId={selectedId} onBack={() => navigate("/chat")} />}
-        />
-        <Route
-          path="/chat"
-          element={
-            <main className="main">
-              <div className="main-header">
-                <span>{identities.find((i) => i.id === selectedId)?.name ?? "未选择身份"}</span>
-                {selectedId && conversations.activeId && (
-                  <button
-                    className="btn-link danger-link"
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm("确定删除当前会话及其全部消息吗？此操作无法撤销。")) {
-                        void conversations.deleteActiveConversation();
-                      }
-                    }}
-                  >
-                    删除会话
-                  </button>
-                )}
-              </div>
-              {chat.loadingHistory && <div className="muted">加载历史…</div>}
-              <ChatWindow
-                messages={chat.messages}
-                isStreaming={chat.isStreaming}
-                emptyText={selectedId ? "发送一条消息开始对话。" : "请先选择一个身份。"}
-              />
-              {chat.error && <div className="error">{chat.error}</div>}
-              <ChatInput
-                onSend={(text) => void chat.sendMessage(text)}
-                onStop={chat.stop}
-                isStreaming={chat.isStreaming}
-                disabled={!selectedId || chat.loadingHistory}
-              />
-            </main>
+    <div className="app-shell">
+      <ConversationSidebar
+        conversations={conversations.conversations}
+        activeId={conversations.activeId}
+        collapsed={sidebarCollapsed}
+        mobileOpen={mobileSidebarOpen}
+        activeRoute={activeRoute}
+        onToggle={() => {
+          if (window.matchMedia("(max-width: 760px)").matches) {
+            setMobileSidebarOpen(false);
+          } else {
+            setSidebarCollapsed((value) => !value);
           }
-        />
-        <Route path="*" element={<Navigate to="/chat" replace />} />
-      </Routes>
+        }}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+        onSelect={(id) => {
+          conversations.selectConversation(id);
+          navigate("/chat");
+          setMobileSidebarOpen(false);
+        }}
+        onCreate={() => {
+          void conversations.startConversation();
+          navigate("/chat");
+          setMobileSidebarOpen(false);
+        }}
+        onRename={conversations.renameConversation}
+        onDelete={conversations.removeConversation}
+        onNavigate={go}
+        onManagePersonas={() => setPersonaManager("list")}
+      />
+
+      <div className="app-main">
+        <Routes>
+          <Route path="/" element={<Navigate to="/chat" replace />} />
+          <Route
+            path="/chat"
+            element={
+              <main className="chat-page">
+                <header className="chat-header">
+                  <button className="mobile-menu-button" type="button" onClick={() => setMobileSidebarOpen(true)} aria-label="打开侧边栏">
+                    <Menu size={20} />
+                  </button>
+                  <PersonaSelector
+                    identities={activeIdentities}
+                    selectedId={selectedId}
+                    disabled={chat.isStreaming}
+                    onSelect={(id) => {
+                      setSelectedId(id);
+                      navigate("/chat");
+                    }}
+                    onCreate={() => setPersonaManager("create")}
+                    onManage={() => setPersonaManager("list")}
+                  />
+                  <span className="header-status">
+                    {chat.isStreaming ? "正在回复…" : selectedIdentity?.description}
+                  </span>
+                </header>
+                {chat.loadingHistory && <div className="page-notice">正在加载对话…</div>}
+                <ChatWindow
+                  messages={chat.messages}
+                  isStreaming={chat.isStreaming}
+                  emptyText="今天想聊点什么？"
+                  identity={selectedIdentity}
+                />
+                {chat.error && <div className="page-error">{chat.error}</div>}
+                <ChatInput
+                  onSend={(text) => void chat.sendMessage(text)}
+                  onStop={chat.stop}
+                  isStreaming={chat.isStreaming}
+                  disabled={!selectedId || chat.loadingHistory}
+                  identityName={selectedIdentity?.name}
+                />
+              </main>
+            }
+          />
+          <Route path="/settings" element={<ProviderSettings onBack={() => navigate("/chat")} />} />
+          <Route path="/knowledge" element={<KnowledgePage identityId={selectedId} onBack={() => navigate("/chat")} />} />
+          <Route path="*" element={<Navigate to="/chat" replace />} />
+        </Routes>
+      </div>
+
+      <PersonaManager
+        open={personaManager !== null}
+        initialMode={personaManager === "create" ? "create" : "list"}
+        identities={identityStore.identities}
+        onClose={() => setPersonaManager(null)}
+        onCreate={createPersona}
+        onUpdate={identityStore.update}
+        onArchive={identityStore.archive}
+        onRestore={identityStore.restore}
+        onDuplicate={identityStore.duplicate}
+      />
     </div>
   );
 }

@@ -14,7 +14,7 @@ from chatmaster.ai.models import build_embeddings
 from chatmaster.ai.vectorstore import delete_collection, ensure_collection
 from chatmaster.config import get_settings
 from chatmaster.db.models import Document, IndexVersion
-from chatmaster.identities.loader import get_registry
+from chatmaster.identities.service import get_identity_model, to_config
 
 
 def embedding_fingerprint() -> str:
@@ -123,7 +123,17 @@ def rebuild_index(
         raise ValueError("target must be 'private' or 'common'")
     if target == "private" and not identity_id:
         raise ValueError("identity_id is required for a private index rebuild")
-    identity = get_registry().get(identity_id) if identity_id else None
+    identity = (
+        to_config(
+            get_identity_model(
+                db,
+                workspace_id=workspace_id,
+                identity_id=identity_id,
+            )
+        )
+        if identity_id
+        else None
+    )
     settings = get_settings()
     namespace = "common" if target == "common" else "private"
     version_identity_id = None if namespace == "common" else identity_id

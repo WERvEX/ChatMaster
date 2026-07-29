@@ -41,12 +41,22 @@ def migrate_db() -> None:
             if "messages" in tables
             else set()
         )
+        identity_columns = (
+            {column["name"] for column in inspector.get_columns("identities")}
+            if "identities" in tables
+            else set()
+        )
         # A database created by the current model already contains the reliability
-        # fields; adopt it at head. Older create_all databases need the 0002 upgrade.
+        # and persona fields; adopt it at head. Older create_all databases need
+        # the corresponding incremental upgrades.
+        if {"avatar_url", "is_system"}.issubset(identity_columns):
+            adopt_revision = "0003_persona_management"
+        elif {"request_id", "status"}.issubset(message_columns):
+            adopt_revision = "0002_reliability_fields"
+        else:
+            adopt_revision = "0001_baseline"
         command.stamp(
             config,
-            "0002_reliability_fields"
-            if {"request_id", "status"}.issubset(message_columns)
-            else "0001_baseline",
+            adopt_revision,
         )
     command.upgrade(config, "head")

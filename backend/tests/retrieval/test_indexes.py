@@ -6,8 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from chatmaster.db.base import Base
-from chatmaster.db.models import Document, IndexVersion, Workspace
-from chatmaster.identities.schema import IdentityConfig
+from chatmaster.db.models import Document, Identity, IndexVersion, Workspace
 
 
 def _session():
@@ -27,6 +26,17 @@ def test_active_collection_uses_active_version(monkeypatch) -> None:
     SessionLocal = _session()
     with SessionLocal() as db:
         db.add(Workspace(id="local", name="Local"))
+        db.add(
+            Identity(
+                id="legal_expert",
+                workspace_id="local",
+                slug="legal_expert",
+                name="Legal",
+                description="",
+                system_prompt="",
+                private_collection="legal",
+            )
+        )
         db.add(
             IndexVersion(
                 id="version-1",
@@ -60,6 +70,17 @@ def test_rebuild_activates_new_version_only_after_success(tmp_path: Path, monkey
     with SessionLocal() as db:
         db.add(Workspace(id="local", name="Local"))
         db.add(
+            Identity(
+                id="legal_expert",
+                workspace_id="local",
+                slug="legal_expert",
+                name="Legal",
+                description="",
+                system_prompt="",
+                private_collection="legal",
+            )
+        )
+        db.add(
             Document(
                 id="doc-1",
                 workspace_id="local",
@@ -87,23 +108,6 @@ def test_rebuild_activates_new_version_only_after_success(tmp_path: Path, monkey
         db.commit()
 
         monkeypatch.setattr(indexes, "get_settings", lambda: _Settings())
-        monkeypatch.setattr(
-            indexes,
-            "get_registry",
-            lambda: type(
-                "R",
-                (),
-                {
-                    "get": lambda _, __: IdentityConfig(
-                        id="legal_expert",
-                        name="Legal",
-                        description="",
-                        system_prompt="",
-                        private_collection="legal",
-                    )
-                },
-            )(),
-        )
         monkeypatch.setattr(indexes, "ensure_collection", lambda *_: None)
         monkeypatch.setattr(
             indexes,

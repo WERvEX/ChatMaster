@@ -14,7 +14,7 @@ from chatmaster.ai.models import build_embeddings
 from chatmaster.ai.vectorstore import get_store
 from chatmaster.config import get_settings
 from chatmaster.db.models import Document, DocumentChunk
-from chatmaster.identities.loader import get_registry
+from chatmaster.identities.service import get_identity_model, to_config
 from chatmaster.schemas.api import IngestFileResult, IngestResult
 
 
@@ -39,10 +39,21 @@ def ingest(
         raise ValueError("target must be 'private' or 'common'")
 
     settings = get_settings()
-    registry = get_registry()
     if target == "private" and not identity_id:
         raise ValueError("identity_id is required for private ingestion")
-    identity = registry.get(identity_id) if identity_id else None
+    if identity_id and (db is None or workspace_id is None):
+        raise ValueError("workspace_id and db are required for identity ingestion")
+    identity = (
+        to_config(
+            get_identity_model(
+                db,
+                workspace_id=workspace_id,
+                identity_id=identity_id,
+            )
+        )
+        if identity_id and db is not None and workspace_id is not None
+        else None
+    )
 
     logical_collection = (
         settings.common_collection if target == "common" else identity.private_collection

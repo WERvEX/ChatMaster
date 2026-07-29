@@ -1,7 +1,9 @@
 import type {
   ConversationOut,
   DocumentOut,
+  IdentityDetail,
   IdentityOut,
+  IdentityPayload,
   IngestJobOut,
   IngestSubmission,
   IndexVersionOut,
@@ -10,11 +12,56 @@ import type {
   ProviderTestResult,
 } from "../types/api";
 
-export async function getIdentities(): Promise<IdentityOut[]> {
-  const r = await fetch("/api/identities");
+export async function getIdentities(includeArchived = false): Promise<IdentityOut[]> {
+  const r = await fetch(`/api/identities${includeArchived ? "?include_archived=true" : ""}`);
   if (!r.ok) throw new Error(`Failed to load identities: ${r.status}`);
   return r.json();
 }
+
+export async function getIdentity(identityId: string): Promise<IdentityDetail> {
+  const r = await fetch(`/api/identities/${encodeURIComponent(identityId)}`);
+  if (!r.ok) throw new Error(`Failed to load identity: ${r.status}`);
+  return r.json();
+}
+
+export async function createIdentity(payload: IdentityPayload): Promise<IdentityDetail> {
+  const r = await fetch("/api/identities", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`Create identity failed: ${r.status}`);
+  return r.json();
+}
+
+export async function updateIdentity(
+  identityId: string,
+  payload: IdentityPayload
+): Promise<IdentityDetail> {
+  const r = await fetch(`/api/identities/${encodeURIComponent(identityId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`Update identity failed: ${r.status}`);
+  return r.json();
+}
+
+async function postIdentityAction(identityId: string, action: string): Promise<IdentityDetail> {
+  const r = await fetch(
+    `/api/identities/${encodeURIComponent(identityId)}/${action}`,
+    { method: "POST" }
+  );
+  if (!r.ok) throw new Error(`${action} identity failed: ${r.status}`);
+  return r.json();
+}
+
+export const archiveIdentity = (identityId: string) =>
+  postIdentityAction(identityId, "archive");
+export const restoreIdentity = (identityId: string) =>
+  postIdentityAction(identityId, "restore");
+export const duplicateIdentity = (identityId: string) =>
+  postIdentityAction(identityId, "duplicate");
 
 export async function ingestDocuments(
   files: File[],
@@ -152,4 +199,17 @@ export async function getConversationMessages(conversationId: string): Promise<M
 export async function deleteConversation(conversationId: string): Promise<void> {
   const r = await fetch(`/api/conversations/${conversationId}`, { method: "DELETE" });
   if (!r.ok) throw new Error(`Delete conversation failed: ${r.status}`);
+}
+
+export async function updateConversation(
+  conversationId: string,
+  title: string
+): Promise<ConversationOut> {
+  const r = await fetch(`/api/conversations/${conversationId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!r.ok) throw new Error(`Rename conversation failed: ${r.status}`);
+  return r.json();
 }

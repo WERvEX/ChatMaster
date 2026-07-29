@@ -116,25 +116,34 @@ async def retrieve(
     cfg = identity.retrieval
     assert_indexes_fresh(db, workspace_id=workspace_id)
 
-    private_collection = active_collection(
-        db,
-        workspace_id=workspace_id,
-        logical_name=identity.private_collection,
-        identity_id=identity.id,
-    )
     common_collection = active_collection(
         db,
         workspace_id=workspace_id,
         logical_name=settings.common_collection,
         identity_id=None,
     )
-    private_store = get_store(private_collection, embeddings)
     common_store = get_store(common_collection, embeddings)
 
-    private_hits, common_hits = await asyncio.gather(
-        _search_one(private_store, query, cfg.top_k, private_collection),
-        _search_one(common_store, query, settings.common_top_k, common_collection),
-    )
+    if identity.uses_private_knowledge:
+        private_collection = active_collection(
+            db,
+            workspace_id=workspace_id,
+            logical_name=identity.private_collection,
+            identity_id=identity.id,
+        )
+        private_store = get_store(private_collection, embeddings)
+        private_hits, common_hits = await asyncio.gather(
+            _search_one(private_store, query, cfg.top_k, private_collection),
+            _search_one(common_store, query, settings.common_top_k, common_collection),
+        )
+    else:
+        private_hits = []
+        common_hits = await _search_one(
+            common_store,
+            query,
+            settings.common_top_k,
+            common_collection,
+        )
 
     return fuse_ranked_results(
         private_hits=private_hits,
