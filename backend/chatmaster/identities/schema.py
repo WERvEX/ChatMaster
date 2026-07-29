@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field
 class RetrievalConfig(BaseModel):
     """How an identity retrieves context from its private + the common collection."""
 
-    top_k: int = 6
-    private_weight: float = 0.6
-    common_weight: float = 0.4
-    min_chunks_common: int = 2
+    top_k: int = Field(default=6, ge=1, le=20)
+    private_weight: float = Field(default=0.6, ge=0, le=1)
+    common_weight: float = Field(default=0.4, ge=0, le=1)
+    min_chunks_common: int = Field(default=2, ge=0, le=20)
 
 
 class IdentityConfig(BaseModel):

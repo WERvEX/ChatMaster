@@ -6,8 +6,6 @@ import { useChat } from "./features/chat/useChat";
 import { IdentitySelector } from "./components/IdentitySelector";
 import { ChatWindow } from "./features/chat/ChatWindow";
 import { ChatInput } from "./features/chat/ChatInput";
-import { SourceList } from "./features/chat/SourceList";
-import { DocumentUpload } from "./components/DocumentUpload";
 import { ProviderSettings } from "./components/ProviderSettings";
 import { KnowledgePage } from "./features/knowledge/KnowledgePage";
 
@@ -62,7 +60,7 @@ export default function App() {
               <button
                 className="btn-link"
                 type="button"
-                onClick={() => void conversations.startConversation()}
+                onClick={() => conversations.setActiveId(null)}
               >
                 新建
               </button>
@@ -87,44 +85,61 @@ export default function App() {
             </ul>
           </section>
         )}
-        {selectedId && isChatRoute && <DocumentUpload identityId={selectedId} />}
-        <button
-          className={`settings-toggle ${isKnowledgeRoute ? "active" : ""}`}
-          onClick={() => navigate("/knowledge")}
-        >
-          知识库
-        </button>
-        <button
-          className={`settings-toggle ${isSettingsRoute ? "active" : ""}`}
-          onClick={() => navigate(isSettingsRoute ? "/chat" : "/settings")}
-        >
-          ⚙ API 配置
-        </button>
+        <nav className="sidebar-nav" aria-label="主导航">
+          <button
+            className={`settings-toggle ${isChatRoute ? "active" : ""}`}
+            onClick={() => navigate("/chat")}
+          >
+            对话
+          </button>
+          <button
+            className={`settings-toggle ${isKnowledgeRoute ? "active" : ""}`}
+            onClick={() => navigate("/knowledge")}
+          >
+            知识库
+          </button>
+          <button
+            className={`settings-toggle ${isSettingsRoute ? "active" : ""}`}
+            onClick={() => navigate("/settings")}
+          >
+            API 配置
+          </button>
+        </nav>
       </aside>
 
       <Routes>
         <Route path="/" element={<Navigate to="/chat" replace />} />
         <Route path="/settings" element={<ProviderSettings onBack={() => navigate("/chat")} />} />
-        <Route path="/knowledge" element={<KnowledgePage identityId={selectedId} />} />
+        <Route
+          path="/knowledge"
+          element={<KnowledgePage identityId={selectedId} onBack={() => navigate("/chat")} />}
+        />
         <Route
           path="/chat"
           element={
             <main className="main">
               <div className="main-header">
                 <span>{identities.find((i) => i.id === selectedId)?.name ?? "未选择身份"}</span>
-                {selectedId && (
+                {selectedId && conversations.activeId && (
                   <button
-                    className="btn-link"
+                    className="btn-link danger-link"
                     type="button"
-                    onClick={() => void conversations.clearActiveConversation()}
+                    onClick={() => {
+                      if (window.confirm("确定删除当前会话及其全部消息吗？此操作无法撤销。")) {
+                        void conversations.deleteActiveConversation();
+                      }
+                    }}
                   >
-                    清空对话
+                    删除会话
                   </button>
                 )}
               </div>
               {chat.loadingHistory && <div className="muted">加载历史…</div>}
-              <ChatWindow messages={chat.messages} isStreaming={chat.isStreaming} />
-              <SourceList sources={chat.sources} />
+              <ChatWindow
+                messages={chat.messages}
+                isStreaming={chat.isStreaming}
+                emptyText={selectedId ? "发送一条消息开始对话。" : "请先选择一个身份。"}
+              />
               {chat.error && <div className="error">{chat.error}</div>}
               <ChatInput
                 onSend={(text) => void chat.sendMessage(text)}

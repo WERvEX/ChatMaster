@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from chatmaster.ai.providers import (
@@ -9,7 +9,7 @@ from chatmaster.ai.providers import (
     ProvidersConfig,
 )
 from chatmaster.db.base import Base
-from chatmaster.db.models import Workspace
+from chatmaster.db.models import ProviderConfig, Workspace
 
 
 class DummySettings:
@@ -20,6 +20,8 @@ class DummySettings:
     default_embedding_provider = "huggingface"
     default_embedding_model = "BAAI/bge-small-zh-v1.5"
     huggingface_endpoint = "https://hf-mirror.com"
+    provider_encryption_key = "WlW2K8p6y83P8ueVBvjKqvPE9s2krJzRg3B9pFMn8Mk="
+    allow_private_provider_urls = True
 
 
 def _session() -> Session:
@@ -71,6 +73,9 @@ def test_save_provider_config_replaces_new_keys() -> None:
 
         assert saved.chat.api_key == "sk-new-chat"
         assert saved.embedding.api_key == "sk-new-embedding"
+        row = db.execute(select(ProviderConfig)).scalar_one()
+        assert "sk-new-chat" not in row.chat_api_key_encrypted
+        assert row.chat_api_key_encrypted.startswith("fernet:")
 
 
 def test_save_provider_config_keeps_previous_keys_when_payload_is_masked() -> None:

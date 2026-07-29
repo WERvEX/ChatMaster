@@ -29,4 +29,3 @@ class RetrievedChunk:
     @property
     def score(self) -> float:
         return self.fusion_score
-

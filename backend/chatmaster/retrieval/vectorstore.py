@@ -13,4 +13,3 @@ def validate_vector_dimension(collection_name: str, expected_dim: int, actual_di
             f"Collection '{collection_name}' has vector size {actual_dim}; "
             f"expected {expected_dim}. Rebuild the index after changing the embedding model."
         )
-

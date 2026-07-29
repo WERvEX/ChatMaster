@@ -43,22 +43,28 @@ def post_conversation(
 @router.get("/api/conversations", response_model=list[ConversationOut])
 def get_conversations(
     identity_id: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     workspace_id: str = Depends(get_current_workspace_id),
     db: Session = Depends(get_db),
 ):
-    return list_conversations(db, workspace_id=workspace_id, identity_id=identity_id)
+    return list_conversations(db, workspace_id=workspace_id, identity_id=identity_id)[
+        offset : offset + limit
+    ]
 
 
 @router.get("/api/conversations/{conversation_id}/messages", response_model=list[MessageOut])
 def get_conversation_messages(
     conversation_id: str,
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     workspace_id: str = Depends(get_current_workspace_id),
     db: Session = Depends(get_db),
 ):
     try:
-        return list_messages(
-            db, workspace_id=workspace_id, conversation_id=conversation_id
-        )
+        return list_messages(db, workspace_id=workspace_id, conversation_id=conversation_id)[
+            offset : offset + limit
+        ]
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found") from None
 
@@ -70,8 +76,6 @@ def remove_conversation(
     db: Session = Depends(get_db),
 ):
     try:
-        delete_conversation(
-            db, workspace_id=workspace_id, conversation_id=conversation_id
-        )
+        delete_conversation(db, workspace_id=workspace_id, conversation_id=conversation_id)
     except ConversationNotFound:
         raise HTTPException(status_code=404, detail="Conversation not found") from None

@@ -7,11 +7,13 @@ from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from sqlalchemy.orm import Session
 
 from chatmaster.ai.vectorstore import get_store
 from chatmaster.config import get_settings
 from chatmaster.identities.schema import IdentityConfig
 from chatmaster.retrieval.schemas import RetrievedChunk, SearchHit
+from chatmaster.retrieval.indexes import active_collection, assert_indexes_fresh
 
 _RRF_K = 60
 
@@ -106,16 +108,32 @@ async def retrieve(
     identity: IdentityConfig,
     query: str,
     embeddings: Embeddings,
+    *,
+    db: Session,
+    workspace_id: str,
 ) -> list[RetrievedChunk]:
     settings = get_settings()
     cfg = identity.retrieval
+    assert_indexes_fresh(db, workspace_id=workspace_id)
 
-    private_store = get_store(identity.private_collection, embeddings)
-    common_store = get_store(settings.common_collection, embeddings)
+    private_collection = active_collection(
+        db,
+        workspace_id=workspace_id,
+        logical_name=identity.private_collection,
+        identity_id=identity.id,
+    )
+    common_collection = active_collection(
+        db,
+        workspace_id=workspace_id,
+        logical_name=settings.common_collection,
+        identity_id=None,
+    )
+    private_store = get_store(private_collection, embeddings)
+    common_store = get_store(common_collection, embeddings)
 
     private_hits, common_hits = await asyncio.gather(
-        _search_one(private_store, query, cfg.top_k, identity.private_collection),
-        _search_one(common_store, query, settings.common_top_k, settings.common_collection),
+        _search_one(private_store, query, cfg.top_k, private_collection),
+        _search_one(common_store, query, settings.common_top_k, common_collection),
     )
 
     return fuse_ranked_results(
@@ -125,5 +143,5 @@ async def retrieve(
         private_weight=cfg.private_weight,
         common_weight=cfg.common_weight,
         min_chunks_common=cfg.min_chunks_common,
-        common_collection=settings.common_collection,
+        common_collection=common_collection,
     )

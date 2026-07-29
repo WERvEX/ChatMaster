@@ -71,6 +71,14 @@ export function ProviderSettings({ onBack }: Props) {
               value={config.chat.api_key ?? ""}
               onChange={(e) => setChat({ api_key: e.target.value || null })}
             />
+            <span className="muted hint">
+              <input
+                type="checkbox"
+                checked={config.chat.clear_api_key}
+                onChange={(e) => setChat({ clear_api_key: e.target.checked })}
+              />{" "}
+              清除已保存的 Key
+            </span>
           </label>
           <label className="field">
             <span>模型</span>
@@ -126,8 +134,16 @@ export function ProviderSettings({ onBack }: Props) {
                   type="password"
                   placeholder="sk-..."
                   value={config.embedding.api_key ?? ""}
-                  onChange={(e) => setEmb({ api_key: e.target.value || null })}
-                />
+                onChange={(e) => setEmb({ api_key: e.target.value || null })}
+              />
+              <span className="muted hint">
+                <input
+                  type="checkbox"
+                  checked={config.embedding.clear_api_key}
+                  onChange={(e) => setEmb({ clear_api_key: e.target.checked })}
+                />{" "}
+                清除已保存的 Key
+              </span>
               </label>
             </>
           )}

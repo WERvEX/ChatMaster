@@ -20,12 +20,14 @@ from langchain_core.language_models import BaseChatModel
 from chatmaster.ai.providers import get_provider_config
 from chatmaster.config import get_settings
 from chatmaster.identities.schema import IdentityConfig
+from chatmaster.providers.security import validate_provider_url
 
 # Provider type aliases that all speak the OpenAI chat/embeddings protocol.
 _OPENAI_COMPATIBLE = {"openai", "deepseek", "moonshot", "openai-compatible"}
 
 
 # ----- Chat models -----
+
 
 @lru_cache(maxsize=64)
 def _build_openai_chat(model: str, base_url: str | None, api_key: str) -> BaseChatModel:
@@ -58,6 +60,7 @@ def build_chat_model(identity: IdentityConfig) -> BaseChatModel:
     # .env value still works as a fallback if the UI config has no key set.
     api_key = cfg.api_key or settings.openai_api_key
     base_url = cfg.base_url or settings.openai_base_url
+    validate_provider_url(base_url, allow_private_network=settings.allow_private_provider_urls)
 
     if provider in _OPENAI_COMPATIBLE:
         if not api_key:
@@ -74,6 +77,7 @@ def build_chat_model(identity: IdentityConfig) -> BaseChatModel:
 
 
 # ----- Embeddings -----
+
 
 @lru_cache(maxsize=8)
 def _build_hf_embeddings(model: str, endpoint: str | None) -> Embeddings:
@@ -107,11 +111,7 @@ def build_embeddings(identity: IdentityConfig | None = None) -> Embeddings:
     """
     cfg = get_provider_config().embedding
     settings = get_settings()
-    model = (
-        identity.embedding_model
-        if identity and identity.embedding_model
-        else cfg.model
-    )
+    model = identity.embedding_model if identity and identity.embedding_model else cfg.model
     provider = cfg.provider.lower()
 
     if provider == "huggingface":
@@ -119,10 +119,9 @@ def build_embeddings(identity: IdentityConfig | None = None) -> Embeddings:
     if provider in _OPENAI_COMPATIBLE:
         api_key = cfg.api_key or settings.openai_api_key
         base_url = cfg.base_url or settings.openai_base_url
+        validate_provider_url(base_url, allow_private_network=settings.allow_private_provider_urls)
         if not api_key:
-            raise RuntimeError(
-                "Embedding API key not configured. Set it on the API 配置 page."
-            )
+            raise RuntimeError("Embedding API key not configured. Set it on the API 配置 page.")
         return _build_openai_embeddings(model, base_url, api_key)
     raise ValueError(f"Unknown embedding provider: {provider}")
 

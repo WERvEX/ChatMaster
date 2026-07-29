@@ -14,14 +14,18 @@ export interface IdentityOut {
 }
 
 export interface Message {
+  id?: string;
   role: "user" | "assistant";
   content: string;
+  request_id?: string | null;
+  status?: "pending" | "complete" | "stopped" | "failed";
+  sources?: SourceItem[];
 }
 
 export interface ChatRequest {
+  request_id: string;
   identity_id: string;
   message: string;
-  history: Message[];
   conversation_id?: string | null;
 }
 
@@ -30,6 +34,8 @@ export interface SourceItem {
   source_file: string;
   collection: string;
   score: number;
+  document_id?: string | null;
+  chunk_id?: string | null;
 }
 
 export interface IngestFileResult {
@@ -46,13 +52,25 @@ export interface IngestResult {
   total_chunks: number;
 }
 
+export interface IngestSubmissionItem {
+  file: string;
+  document_id: string;
+  job_id: string | null;
+  status: string;
+  duplicate: boolean;
+  error: string | null;
+}
+
+export interface IngestSubmission {
+  items: IngestSubmissionItem[];
+}
+
 export interface DocumentOut {
   id: string;
   identity_id: string | null;
   namespace: string;
   filename: string;
   content_type: string | null;
-  storage_path: string;
   sha256: string;
   status: string;
   created_at: string;
@@ -83,6 +101,8 @@ export interface MessageOut {
   role: string;
   content: string;
   sources_json: SourceItem[] | null;
+  request_id: string | null;
+  status: "pending" | "complete" | "stopped" | "failed";
   created_at: string;
 }
 
@@ -91,6 +111,7 @@ export interface ChatProviderConfig {
   base_url: string | null;
   api_key: string | null;
   model: string;
+  clear_api_key: boolean;
 }
 
 export interface EmbeddingProviderConfig {
@@ -99,6 +120,7 @@ export interface EmbeddingProviderConfig {
   api_key: string | null;
   model: string;
   huggingface_endpoint: string | null;
+  clear_api_key: boolean;
 }
 
 export interface ProvidersConfig {
@@ -109,4 +131,18 @@ export interface ProvidersConfig {
 export interface ProviderTestResult {
   chat: string;
   embedding: string;
+}
+
+export interface IndexVersionOut {
+  id: string;
+  namespace: "private" | "common";
+  identity_id: string | null;
+  logical_name: string;
+  collection_name: string;
+  embedding_provider: string;
+  embedding_model: string;
+  embedding_dim: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }

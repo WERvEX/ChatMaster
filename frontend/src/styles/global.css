@@ -117,13 +117,13 @@ body {
 .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-stop { background: #ef4444; color: #fff; }
 .btn-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; }
+.danger-link { color: #dc2626; }
 
 .error { color: #dc2626; font-size: 13px; padding: 4px 20px; }
 .muted { color: var(--muted); font-size: 13px; padding: 8px 0; }
 
 /* Settings nav + page */
 .settings-toggle {
-  margin-top: auto;
   text-align: left;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -133,6 +133,13 @@ body {
   font-size: 13px;
   color: #1f1f23;
 }
+.sidebar-nav {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.sidebar-nav .settings-toggle { text-align: center; padding: 9px 6px; }
 .settings-toggle:hover { border-color: var(--accent); }
 .settings-toggle.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
@@ -170,6 +177,30 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+.secondary-nav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.secondary-nav button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.secondary-nav button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.empty-state {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 24px 8px;
+  text-align: center;
+}
 .knowledge-section {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -195,4 +226,26 @@ body {
 .data-table th {
   color: var(--muted);
   font-weight: 600;
+}
+
+@media (max-width: 800px) {
+  .sidebar {
+    width: 220px;
+    padding: 12px;
+    gap: 10px;
+  }
+  .identity-card { padding: 10px; }
+  .identity-desc {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .conversation-list { gap: 4px; }
+  .conversation-item { padding: 7px 8px; }
+  .sidebar-nav { grid-template-columns: 1fr; }
+  .sidebar-nav .settings-toggle { text-align: left; }
+  .main-header { padding: 12px 16px; }
+  .chat-window, .knowledge-body { padding: 16px; }
+  .chat-input { padding: 12px 16px; }
 }

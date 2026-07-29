@@ -37,9 +37,11 @@ class Settings(BaseSettings):
     # HuggingFace download mirror (helpful in China). Set to https://hf-mirror.com
     huggingface_endpoint: str | None = "https://hf-mirror.com"
 
-    # Runtime-customizable provider config (edited from the web UI "API 配置" page).
-    # On first run, if this file is absent it is seeded from the .env values above.
-    providers_file: str = "data/providers.json"
+    # URL-safe base64 Fernet key used to encrypt provider API keys at rest.
+    provider_encryption_key: str | None = None
+    # Loopback endpoints are always accepted for local model runtimes; private
+    # LAN addresses need this explicit opt-in.
+    allow_private_provider_urls: bool = False
 
     # Local/small-team persistence. SQLite is the demo default; the schema is
     # kept PostgreSQL-compatible so DATABASE_URL can later point to Postgres.
@@ -57,6 +59,11 @@ class Settings(BaseSettings):
     # Server. Env value is a JSON array string, e.g. ["http://localhost:5173"]
     cors_origins: list[str] = ["http://localhost:5173"]
     upload_max_bytes: int = 26 * 1024 * 1024
+    upload_batch_max_bytes: int = 100 * 1024 * 1024
+    ingest_workers: int = 2
+    chat_history_max_messages: int = 40
+    chat_history_max_chars: int = 40_000
+    chat_message_max_chars: int = 20_000
 
 
 @lru_cache

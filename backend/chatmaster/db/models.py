@@ -27,7 +27,9 @@ class Workspace(Base):
     created_at: Mapped[datetime] = mapped_column(default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now, nullable=False)
 
-    users: Mapped[list[User]] = relationship(back_populates="workspace", cascade="all, delete-orphan")
+    users: Mapped[list[User]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
     identities: Mapped[list[Identity]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan"
     )
@@ -48,7 +50,9 @@ class User(Base):
 
 class Identity(Base):
     __tablename__ = "identities"
-    __table_args__ = (UniqueConstraint("workspace_id", "slug", name="uq_identities_workspace_slug"),)
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "slug", name="uq_identities_workspace_slug"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
@@ -59,7 +63,9 @@ class Identity(Base):
     private_collection: Mapped[str] = mapped_column(String(255), nullable=False)
     generation_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    retrieval_config_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    retrieval_config_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now, nullable=False)
@@ -107,6 +113,14 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "request_id",
+            "role",
+            name="uq_messages_conversation_request_role",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
@@ -114,6 +128,8 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     sources_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="complete")
     created_at: Mapped[datetime] = mapped_column(default=utc_now, nullable=False)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
@@ -129,12 +145,21 @@ class Document(Base):
             "identity_id",
             name="uq_documents_workspace_hash_namespace_identity",
         ),
+        UniqueConstraint(
+            "workspace_id",
+            "sha256",
+            "scope_key",
+            name="uq_documents_workspace_hash_scope",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    identity_id: Mapped[str | None] = mapped_column(ForeignKey("identities.id"), nullable=True, index=True)
+    identity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("identities.id"), nullable=True, index=True
+    )
     namespace: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(128), nullable=False, default="common")
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
@@ -155,17 +180,23 @@ class Document(Base):
 class IndexVersion(Base):
     __tablename__ = "index_versions"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "collection_name", name="uq_index_versions_workspace_collection"),
+        UniqueConstraint(
+            "workspace_id", "collection_name", name="uq_index_versions_workspace_collection"
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
     namespace: Mapped[str] = mapped_column(String(32), nullable=False)
-    identity_id: Mapped[str | None] = mapped_column(ForeignKey("identities.id"), nullable=True, index=True)
+    identity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("identities.id"), nullable=True, index=True
+    )
     collection_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    logical_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     embedding_provider: Mapped[str] = mapped_column(String(64), nullable=False)
     embedding_model: Mapped[str] = mapped_column(String(255), nullable=False)
     embedding_dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    config_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, default="legacy")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=utc_now, onupdate=utc_now, nullable=False)
@@ -176,6 +207,14 @@ class IndexVersion(Base):
 
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "index_version_id",
+            "document_id",
+            "chunk_index",
+            name="uq_document_chunks_version_document_index",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)

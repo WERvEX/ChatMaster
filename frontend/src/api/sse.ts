@@ -4,8 +4,13 @@ import type { ChatRequest, SourceItem } from "../types/api";
 export interface ChatStreamCallbacks {
   onSources: (sources: SourceItem[]) => void;
   onToken: (delta: string) => void;
-  onDone: (payload: { message_id: string; conversation_id?: string }) => void;
-  onError: (detail: string) => void;
+  onDone: (payload: {
+    message_id: string;
+    conversation_id?: string;
+    request_id: string;
+    status: "complete" | "stopped";
+  }) => void;
+  onError: (detail: string, code?: string) => void;
 }
 
 /**
@@ -15,7 +20,7 @@ export interface ChatStreamCallbacks {
 export function streamChat(req: ChatRequest, cb: ChatStreamCallbacks): AbortController {
   const ctrl = new AbortController();
 
-  fetchEventSource("/api/chat", {
+  void fetchEventSource("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
@@ -33,17 +38,20 @@ export function streamChat(req: ChatRequest, cb: ChatStreamCallbacks): AbortCont
           cb.onDone({
             message_id: data.message_id ?? "",
             conversation_id: data.conversation_id,
+            request_id: data.request_id ?? req.request_id,
+            status: data.status ?? "complete",
           });
           break;
         case "error":
-          cb.onError(data.detail ?? "unknown error");
+          cb.onError(data.message ?? data.detail ?? "回答生成失败", data.code);
           break;
       }
     },
     onerror(err) {
-      cb.onError(String(err));
       throw err; // stop retrying
     },
+  }).catch((err) => {
+    if (!ctrl.signal.aborted) cb.onError(String(err));
   });
 
   return ctrl;

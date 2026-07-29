@@ -27,31 +27,39 @@ logger = logging.getLogger("chatmaster")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    from chatmaster.db.init_db import init_db
+    from chatmaster.db.init_db import migrate_db
     from chatmaster.db.seed import seed_local_data
     from chatmaster.db.session import SessionLocal
 
-    init_db()
+    migrate_db()
     with SessionLocal() as db:
         seed_local_data(db, settings)
+        from sqlalchemy import update
+
+        from chatmaster.db.models import Message
+
+        db.execute(
+            update(Message)
+            .where(Message.role == "assistant", Message.status == "pending")
+            .values(status="stopped")
+        )
+        db.commit()
     registry = get_registry()  # validates identities.yaml, fails fast on typos
 
-    # Determine embedding dimension for the default embedding model.
-    from chatmaster.ai.models import build_embeddings
-
-    embeddings = build_embeddings()
-    dim = len(embeddings.embed_query("dimension probe"))
-
-    # Ensure every private collection + the common collection exist.
-    from chatmaster.ai.vectorstore import ensure_all_collections
-
-    names = ensure_all_collections(
-        registry.all_collections(), settings.common_collection, dim
-    )
-    logger.info("ChatMaster ready. Collections ensured: %s", names)
     logger.info("Identities: %s", [i.id for i in registry.list_all()])
+    from chatmaster.documents.jobs import resume_pending_jobs
 
-    yield
+    resumed = resume_pending_jobs()
+    logger.info("ChatMaster ready. Resumed ingest jobs: %s", resumed)
+
+    try:
+        yield
+    finally:
+        from chatmaster.ai.vectorstore import close_clients
+        from chatmaster.documents.jobs import shutdown_jobs
+
+        shutdown_jobs()
+        close_clients()
 
 
 def create_app() -> FastAPI:

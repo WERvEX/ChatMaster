@@ -10,13 +10,15 @@ the seed defaults on first run. This replaces the old hardcoded
 
 from __future__ import annotations
 
-import json
 import threading
+import uuid
 from functools import lru_cache
-from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from chatmaster.config import get_settings
 
@@ -29,29 +31,29 @@ _MASK_TOKEN = "****"
 class ChatProviderConfig(BaseModel):
     """The active chat (generation) provider. OpenAI-compatible or Anthropic."""
 
-    provider: str = "openai"  # openai | anthropic  (openai covers DeepSeek/Moonshot/...)
-    base_url: str | None = None  # None => library default (OpenAI). DeepSeek: https://api.deepseek.com/v1
+    provider: Literal["openai", "anthropic", "deepseek", "moonshot", "openai-compatible"] = "openai"
+    base_url: str | None = (
+        None  # None => library default (OpenAI). DeepSeek: https://api.deepseek.com/v1
+    )
     api_key: str | None = None
-    model: str = "deepseek-v4-pro"
+    model: str = Field(default="deepseek-v4-pro", min_length=1, max_length=255)
+    clear_api_key: bool = False
 
 
 class EmbeddingProviderConfig(BaseModel):
     """The active embedding provider. Local HuggingFace (default) or OpenAI-compatible."""
 
-    provider: str = "huggingface"  # huggingface | openai
+    provider: Literal["huggingface", "openai", "openai-compatible"] = "huggingface"
     base_url: str | None = None  # only used for openai-compatible embeddings
     api_key: str | None = None
-    model: str = "BAAI/bge-small-zh-v1.5"
+    model: str = Field(default="BAAI/bge-small-zh-v1.5", min_length=1, max_length=255)
     huggingface_endpoint: str | None = "https://hf-mirror.com"  # HF download mirror
+    clear_api_key: bool = False
 
 
 class ProvidersConfig(BaseModel):
     chat: ChatProviderConfig
     embedding: EmbeddingProviderConfig
-
-
-def providers_path() -> Path:
-    return Path(get_settings().providers_file)
 
 
 def seed_from_settings() -> ProvidersConfig:
@@ -75,11 +77,11 @@ def seed_from_settings() -> ProvidersConfig:
 
 
 @lru_cache(maxsize=1)
-def get_provider_config() -> ProvidersConfig:
+def get_provider_config(workspace_id: str | None = None) -> ProvidersConfig:
     """Return the active provider config.
 
-    Loads from the local database when available; falls back to the legacy JSON
-    file and then the ``.env`` seed if the database is not initialized. The
+    Loads from the local database when available; falls back to environment
+    seed values only when the database is not initialized. The
     result is cached — call
     :func:`save_provider_config` (which clears the cache) after edits.
     """
@@ -89,35 +91,91 @@ def get_provider_config() -> ProvidersConfig:
 
         settings = get_settings()
         with SessionLocal() as db:
-            return _get_db_config(db, settings.local_workspace_id, settings)
+            return _get_db_config(db, workspace_id or settings.local_workspace_id, settings)
     except SQLAlchemyError:
         pass
 
-    path = providers_path()
-    if path.exists():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return ProvidersConfig.model_validate(data)
-        except Exception:
-            # Corrupt/unreadable file -> fall back to seed rather than crash.
-            pass
     return seed_from_settings()
 
 
-def save_provider_config(cfg: ProvidersConfig) -> ProvidersConfig:
-    """Persist ``cfg`` to disk and invalidate all downstream caches."""
+def save_provider_config(cfg: ProvidersConfig, workspace_id: str | None = None) -> ProvidersConfig:
+    """Persist encrypted ``cfg`` and invalidate all downstream caches."""
     try:
         from chatmaster.db.session import SessionLocal
+        from chatmaster.providers.service import get_provider_config as _get_db_config
         from chatmaster.providers.service import save_provider_config as _save_db_config
 
         settings = get_settings()
         with _LOCK, SessionLocal() as db:
-            _save_db_config(db, settings.local_workspace_id, cfg, settings)
-    except SQLAlchemyError:
-        path = providers_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with _LOCK:
-            path.write_text(cfg.model_dump_json(indent=2), encoding="utf-8")
+            before = _get_db_config(db, workspace_id or settings.local_workspace_id, settings)
+            _save_db_config(db, workspace_id or settings.local_workspace_id, cfg, settings)
+            before_embedding = (
+                before.embedding.provider,
+                before.embedding.base_url,
+                before.embedding.model,
+                before.embedding.huggingface_endpoint,
+            )
+            after_embedding = (
+                cfg.embedding.provider,
+                cfg.embedding.base_url,
+                cfg.embedding.model,
+                cfg.embedding.huggingface_endpoint,
+            )
+            if before_embedding != after_embedding:
+                from sqlalchemy import update
+
+                from chatmaster.db.models import IndexVersion
+                from chatmaster.identities.loader import get_registry
+
+                db.execute(
+                    update(IndexVersion)
+                    .where(
+                        IndexVersion.workspace_id == (workspace_id or settings.local_workspace_id),
+                        IndexVersion.status == "active",
+                    )
+                    .values(status="stale")
+                )
+                existing_scopes = {
+                    (item.namespace, item.identity_id)
+                    for item in db.scalars(
+                        select(IndexVersion).where(
+                            IndexVersion.workspace_id
+                            == (workspace_id or settings.local_workspace_id)
+                        )
+                    )
+                }
+                scopes = [
+                    ("common", None, settings.common_collection),
+                    *[
+                        ("private", identity.id, identity.private_collection)
+                        for identity in get_registry().list_all()
+                    ],
+                ]
+                for namespace, identity_id, logical_name in scopes:
+                    if (namespace, identity_id) in existing_scopes:
+                        continue
+                    db.add(
+                        IndexVersion(
+                            id=str(uuid.uuid4()),
+                            workspace_id=workspace_id or settings.local_workspace_id,
+                            namespace=namespace,
+                            identity_id=identity_id,
+                            logical_name=logical_name,
+                            collection_name=logical_name,
+                            embedding_provider=before.embedding.provider,
+                            embedding_model=before.embedding.model,
+                            embedding_dim=0,
+                            config_fingerprint="legacy",
+                            status="stale",
+                        )
+                    )
+                db.commit()
+    except SQLAlchemyError as exc:
+        # The historical JSON fallback stores API keys in plaintext. Refuse to
+        # persist credentials there when the relational store is unavailable.
+        raise RuntimeError(
+            "Provider configuration database is unavailable; configuration was not saved."
+        ) from exc
     get_provider_config.cache_clear()
 
     # The model/embedding builders cache instances by (model, base_url, key);
@@ -125,7 +183,7 @@ def save_provider_config(cfg: ProvidersConfig) -> ProvidersConfig:
     from chatmaster.ai import models as _models
 
     _models.clear_caches()
-    return get_provider_config()
+    return get_provider_config(workspace_id)
 
 
 def mask_key(key: str | None) -> str | None:

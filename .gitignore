@@ -47,8 +47,5 @@ Thumbs.db
 .coverage
 htmlcov/
 
-# Documentation build/output
-docs/
-
 # Reasonix agent workspace
 .reasonix/

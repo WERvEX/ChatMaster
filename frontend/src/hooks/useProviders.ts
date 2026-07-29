@@ -3,13 +3,20 @@ import { getProviders, saveProviders, testProviders } from "../api/client";
 import type { ProvidersConfig, ProviderTestResult } from "../types/api";
 
 const empty: ProvidersConfig = {
-  chat: { provider: "openai", base_url: "", api_key: "", model: "" },
+  chat: {
+    provider: "openai",
+    base_url: "",
+    api_key: "",
+    model: "",
+    clear_api_key: false,
+  },
   embedding: {
     provider: "huggingface",
     base_url: "",
     api_key: "",
     model: "",
     huggingface_endpoint: "",
+    clear_api_key: false,
   },
 };
 
@@ -45,8 +52,10 @@ export function useProviders() {
       const saved = await saveProviders(config);
       setConfig(saved);
       setDirty(false);
+      return true;
     } catch (e) {
       setError(String(e));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -58,7 +67,7 @@ export function useProviders() {
     setError(null);
     try {
       // Test against the currently SAVED config (save first if there are edits).
-      if (dirty) await save();
+      if (dirty && !(await save())) return;
       setTestResult(await testProviders());
     } catch (e) {
       setError(String(e));

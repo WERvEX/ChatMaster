@@ -46,11 +46,11 @@ export function DocumentUpload({ identityId }: Props) {
       {error && <div className="error">{error}</div>}
       {result && (
         <div className="upload-result">
-          <div>已导入集合 <b>{result.collection}</b>，共 {result.total_chunks} 个分块：</div>
+          <div>已提交 {result.items.length} 个文档任务：</div>
           <ul>
-            {result.files.map((f, i) => (
+            {result.items.map((f, i) => (
               <li key={i}>
-                {f.file} — {f.error ? <span className="error">{f.error}</span> : `${f.chunks} 块`}
+                {f.file} — {f.duplicate ? "已存在" : f.status}
               </li>
             ))}
           </ul>

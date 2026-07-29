@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from chatmaster.ai.retriever import RetrievedChunk
+from chatmaster.retrieval.schemas import RetrievedChunk
 
 CONTEXT_HEADER = "## 参考资料\n请基于以下参考资料回答用户问题，并在合适处标注引用序号 [n]："
 

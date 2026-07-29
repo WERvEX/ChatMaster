@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ingestDocuments } from "../api/client";
-import type { IngestResult } from "../types/api";
+import type { IngestSubmission } from "../types/api";
 
 export function useUpload(identityId: string | null) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<IngestResult | null>(null);
+  const [result, setResult] = useState<IngestSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const upload = useCallback(

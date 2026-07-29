@@ -11,9 +11,9 @@ RAG 对话工作流使用 [LangGraph](https://langchain-ai.github.io/langgraph/)
 ## ✨ 特性
 
 - **多身份 RAG**：每个身份一个私有知识库 + 全员共享的通用知识库，检索时用加权 **RRF（Reciprocal Rank Fusion）** 融合两路结果。
-- **流式对话**：SSE 逐 token 输出，附带命中的知识来源（文件名 + 所属库 + 相关度）。
+- **可靠流式对话**：SSE 逐 token 输出，支持停止、幂等 request_id、持久化部分回答与逐消息引用来源。
 - **API 配置可视化**：内置「API 配置」页面，可填入任意 OpenAI 兼容服务（DeepSeek / Moonshot / OpenAI……）或 Anthropic，以及向量模型（本地 HuggingFace / OpenAI 兼容），并带「测试连接」按钮。
-- **知识库管理**：支持 CLI 批量导入 + Web 上传，文档格式 txt / md / pdf / docx。
+- **知识库管理**：支持 CLI 批量导入 + Web 后台上传、失败重试、删除与非破坏式索引重建。
 - **配置即数据**：身份、system prompt、检索参数全部写在 `identities.yaml`。
 - **LangGraph-ready**：AI 层按 retrieve → augment → generate 切分，后续可平滑迁移到 `StateGraph`。
 
@@ -117,7 +117,7 @@ DEFAULT_GENERATION_MODEL=deepseek-v4-pro
 DEFAULT_EMBEDDING_PROVIDER=huggingface
 DEFAULT_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 HUGGINGFACE_ENDPOINT=https://hf-mirror.com      # 国内镜像，避免下载超时
-PROVIDERS_FILE=data/providers.json
+PROVIDER_ENCRYPTION_KEY=请填入Fernet密钥
 ```
 
 > 说明：`.env` 是首次种子；在「API 配置」页面保存后写入 SQLite `provider_configs`，之后以数据库为准。
@@ -125,10 +125,11 @@ PROVIDERS_FILE=data/providers.json
 ### 3. 启动后端
 
 ```bash
-uvicorn chatmaster.main:app --reload --port 8000
+uvicorn chatmaster.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-首次启动会自动下载 embedding 模型（约 100MB，走镜像）并为每个身份创建私有集合 + 通用集合。看到 `ChatMaster ready. Collections ensured: [...]` 即就绪。
+首次启动只执行数据库迁移、种子数据和身份配置校验。Embedding 模型与 Qdrant
+会在首次导入或聊天时按需初始化，因此外部服务暂不可用时仍可进入 API 配置页。
 
 ### 4. 导入知识库
 
@@ -154,9 +155,10 @@ npm run dev          # http://localhost:5173
 ```bash
 curl -N -X POST http://localhost:8000/api/chat \
   -H 'Content-Type: application/json' \
-  -d '{"identity_id":"legal_expert","message":"你好，介绍一下你自己","history":[]}'
+  -d '{"request_id":"00000000-0000-4000-8000-000000000001","identity_id":"legal_expert","message":"你好，介绍一下你自己"}'
 ```
-SSE 事件流：`sources` → 多个 `token` → `done`。
+SSE 事件流：`sources` → 多个 `token` → `done`。停止生成可调用
+`POST /api/chat/{request_id}/cancel`；`done.status` 为 `complete` 或 `stopped`。
 
 ---
 
@@ -168,9 +170,20 @@ SSE 事件流：`sources` → 多个 `token` → `done`。
 - **向量模型**：提供商（HuggingFace 本地 / OpenAI 兼容）、Base URL、API Key、模型名、HF 镜像。
 - **保存即生效**：会清空已缓存的模型/向量/store 实例，下次请求用新配置重建。
 - **安全**：读取时 API key 脱敏（`sk-****fade`）；提交空值或脱敏值时保留原 key，不会被覆盖。
-- **测试连接**：`POST /api/providers/test` 分别试调对话模型与向量模型，返回 ok / 错误信息。
+- **安全**：凭据仅加密写入 SQLite；旧版 `providers.json` 不再被读取。需要迁移时执行 `chatmaster-import-legacy-providers --path data/providers.json --confirm`，确认后再手动删除明文文件。
+- **地址限制**：仅支持 HTTP(S)；本机回环模型服务可直接使用，局域网地址需设置 `ALLOW_PRIVATE_PROVIDER_URLS=true`。
+- **测试连接**：`POST /api/providers/test` 分别试调对话模型与向量模型，失败详情仅写入服务端日志。
 
-> 注意：切换向量模型会导致维度变化，已有的知识库需重新导入（页面有提示）。
+> 注意：切换向量模型会导致维度变化，已有知识库必须重建索引。
+
+切换 embedding provider 或模型后，请使用非破坏式重建命令创建新索引版本；它会在全部文档重嵌入成功后才切换，旧版本会保留：
+
+```bash
+chatmaster-rebuild-index --identity legal_expert --confirm
+# 重建共享知识库：chatmaster-rebuild-index --common --confirm
+# 预览过期/失败索引：chatmaster-cleanup-indexes
+# 确认删除：chatmaster-cleanup-indexes --confirm
+```
 
 ---
 
@@ -207,7 +220,11 @@ SSE 事件流：`sources` → 多个 `token` → `done`。
 | GET | `/api/conversations` | 会话列表 |
 | GET | `/api/conversations/{id}/messages` | 会话消息 |
 | DELETE | `/api/conversations/{id}` | 删除会话 |
-| POST | `/api/documents/ingest` | 文档上传入库 |
+| POST | `/api/documents/ingest` | 提交后台文档导入任务（202） |
+| POST | `/api/ingest-jobs/{id}/retry` | 重试失败导入 |
+| DELETE | `/api/documents/{id}` | 删除文件、分块与向量 |
+| GET | `/api/indexes` | 索引版本和新鲜度 |
+| POST | `/api/indexes/rebuild` | 后台重建索引 |
 | GET | `/api/providers` | 读取 API 配置（key 脱敏） |
 | PUT | `/api/providers` | 保存 API 配置 |
 | POST | `/api/providers/test` | 测试对话 + 向量连接 |

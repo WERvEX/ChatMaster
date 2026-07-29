@@ -95,27 +95,29 @@ export function useConversations(identityId: string | null) {
   const removeConversation = useCallback(
     async (conversationId: string) => {
       if (!identityId) return;
-      await deleteConversation(conversationId);
-      setConversations((items) => {
-        const remaining = items.filter((item) => item.id !== conversationId);
-        if (activeId === conversationId) {
-          const next = remaining[0]?.id ?? null;
-          setActiveId(next);
-          writeStoredConversationId(identityId, next);
-        }
-        return remaining;
-      });
+      setError(null);
+      try {
+        await deleteConversation(conversationId);
+        setConversations((items) => {
+          const remaining = items.filter((item) => item.id !== conversationId);
+          if (activeId === conversationId) {
+            const next = remaining[0]?.id ?? null;
+            setActiveId(next);
+            writeStoredConversationId(identityId, next);
+          }
+          return remaining;
+        });
+      } catch (e) {
+        setError(String(e));
+      }
     },
     [activeId, identityId]
   );
 
-  const clearActiveConversation = useCallback(async () => {
-    if (!identityId || !activeId) {
-      return await startConversation();
-    }
+  const deleteActiveConversation = useCallback(async () => {
+    if (!activeId) return;
     await removeConversation(activeId);
-    return await startConversation();
-  }, [activeId, identityId, removeConversation, startConversation]);
+  }, [activeId, removeConversation]);
 
   return {
     conversations,
@@ -126,7 +128,7 @@ export function useConversations(identityId: string | null) {
     selectConversation,
     startConversation,
     removeConversation,
-    clearActiveConversation,
+    deleteActiveConversation,
     setActiveId,
   };
 }

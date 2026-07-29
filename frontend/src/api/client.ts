@@ -3,7 +3,8 @@ import type {
   DocumentOut,
   IdentityOut,
   IngestJobOut,
-  IngestResult,
+  IngestSubmission,
+  IndexVersionOut,
   MessageOut,
   ProvidersConfig,
   ProviderTestResult,
@@ -19,7 +20,7 @@ export async function ingestDocuments(
   files: File[],
   identityId: string,
   target: "private" | "common"
-): Promise<IngestResult> {
+): Promise<IngestSubmission> {
   const form = new FormData();
   files.forEach((f) => form.append("files", f));
   form.append("identity_id", identityId);
@@ -30,6 +31,44 @@ export async function ingestDocuments(
     throw new Error(`Ingest failed (${r.status}): ${detail}`);
   }
   return r.json();
+}
+
+export async function retryIngestJob(jobId: string): Promise<IngestJobOut> {
+  const r = await fetch(`/api/ingest-jobs/${jobId}/retry`, { method: "POST" });
+  if (!r.ok) throw new Error(`Retry failed: ${r.status}`);
+  return r.json();
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const r = await fetch(`/api/documents/${documentId}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
+}
+
+export async function getIndexes(): Promise<IndexVersionOut[]> {
+  const r = await fetch("/api/indexes");
+  if (!r.ok) throw new Error(`Failed to load indexes: ${r.status}`);
+  return r.json();
+}
+
+export async function rebuildIndex(
+  target: "private" | "common",
+  identityId?: string | null
+): Promise<void> {
+  const r = await fetch("/api/indexes/rebuild", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target, identity_id: identityId ?? null }),
+  });
+  if (!r.ok) throw new Error(`Rebuild failed: ${r.status}`);
+}
+
+export async function cancelChat(requestId: string): Promise<boolean> {
+  const r = await fetch(`/api/chat/${encodeURIComponent(requestId)}/cancel`, {
+    method: "POST",
+  });
+  if (!r.ok) return false;
+  const body = await r.json();
+  return Boolean(body.cancelled);
 }
 
 export async function getProviders(): Promise<ProvidersConfig> {
@@ -60,14 +99,24 @@ export async function testProviders(): Promise<ProviderTestResult> {
   return r.json();
 }
 
-export async function getDocuments(): Promise<DocumentOut[]> {
-  const r = await fetch("/api/documents");
+export async function getDocuments(filters?: {
+  identityId?: string | null;
+  namespace?: "private" | "common" | "";
+  status?: string;
+}): Promise<DocumentOut[]> {
+  const params = new URLSearchParams();
+  if (filters?.identityId) params.set("identity_id", filters.identityId);
+  if (filters?.namespace) params.set("namespace", filters.namespace);
+  if (filters?.status) params.set("status", filters.status);
+  const r = await fetch(`/api/documents?${params}`);
   if (!r.ok) throw new Error(`Failed to load documents: ${r.status}`);
   return r.json();
 }
 
-export async function getIngestJobs(): Promise<IngestJobOut[]> {
-  const r = await fetch("/api/ingest-jobs");
+export async function getIngestJobs(status?: string): Promise<IngestJobOut[]> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const r = await fetch(`/api/ingest-jobs?${params}`);
   if (!r.ok) throw new Error(`Failed to load ingest jobs: ${r.status}`);
   return r.json();
 }

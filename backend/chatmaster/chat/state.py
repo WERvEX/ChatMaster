@@ -15,6 +15,8 @@ class ChatState(TypedDict, total=False):
     user_id: str
     identity_id: str
     conversation_id: str | None
+    request_id: str
+    assistant_message_id: str
     message: str
     history: list[dict[str, str]]
     identity: IdentityConfig
@@ -23,4 +25,3 @@ class ChatState(TypedDict, total=False):
     answer: str
     sources: list[dict[str, Any]]
     error: str
-

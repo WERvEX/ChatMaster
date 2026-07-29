@@ -7,7 +7,9 @@ from chatmaster.retrieval.schemas import SearchHit
 from chatmaster.retrieval.vectorstore import VectorDimensionMismatch, validate_vector_dimension
 
 
-def _hit(text: str, collection: str, rank: int, score: float, point_id: str | None = None) -> SearchHit:
+def _hit(
+    text: str, collection: str, rank: int, score: float, point_id: str | None = None
+) -> SearchHit:
     return SearchHit(
         document=Document(
             page_content=text,

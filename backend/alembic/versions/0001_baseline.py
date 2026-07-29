@@ -133,7 +133,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["identity_id"], ["identities.id"]),
         sa.ForeignKeyConstraint(["workspace_id"], ["workspaces.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("workspace_id", "collection_name", name="uq_index_versions_workspace_collection"),
+        sa.UniqueConstraint(
+            "workspace_id", "collection_name", name="uq_index_versions_workspace_collection"
+        ),
     )
     op.create_index(op.f("ix_index_versions_identity_id"), "index_versions", ["identity_id"])
     op.create_index(op.f("ix_index_versions_workspace_id"), "index_versions", ["workspace_id"])
@@ -185,7 +187,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_document_chunks_document_id"), "document_chunks", ["document_id"])
-    op.create_index(op.f("ix_document_chunks_index_version_id"), "document_chunks", ["index_version_id"])
+    op.create_index(
+        op.f("ix_document_chunks_index_version_id"), "document_chunks", ["index_version_id"]
+    )
     op.create_index(op.f("ix_document_chunks_workspace_id"), "document_chunks", ["workspace_id"])
 
 

@@ -45,6 +45,8 @@ def chunks_to_sources(chunks: list[RetrievedChunk]) -> list[dict[str, Any]]:
             "score": round(chunk.fusion_score, 6),
             "dense_score": chunk.dense_score,
             "rank": chunk.rank,
+            "document_id": chunk.metadata.get("document_id"),
+            "chunk_id": chunk.metadata.get("chunk_id") or chunk.metadata.get("_id"),
         }
         for index, chunk in enumerate(chunks, start=1)
     ]
@@ -63,7 +65,7 @@ async def default_stream_answer(state: ChatState) -> AsyncIterator[str]:
 class ChatRuntime:
     load_identity: Callable[[str], IdentityConfig]
     load_history: Callable[[str | None, str, list[dict[str, str]]], list[dict[str, str]]]
-    retrieve: Callable[[IdentityConfig, str], list[RetrievedChunk] | Any]
+    retrieve: Callable[[IdentityConfig, str, str], list[RetrievedChunk] | Any]
     stream_answer: Callable[[ChatState], AsyncIterator[str]]
     persist: Callable[[ChatState], None]
 
@@ -76,15 +78,16 @@ def _db_load_history(
     if not conversation_id:
         return provided_history
     with SessionLocal() as db:
-        return load_history_from_db(
-            db, workspace_id=workspace_id, conversation_id=conversation_id
-        )
+        return load_history_from_db(db, workspace_id=workspace_id, conversation_id=conversation_id)
 
 
 def default_runtime() -> ChatRuntime:
-    async def retrieve_chunks(identity: IdentityConfig, message: str) -> list[RetrievedChunk]:
+    async def retrieve_chunks(
+        identity: IdentityConfig, message: str, workspace_id: str
+    ) -> list[RetrievedChunk]:
         embeddings = build_embeddings(identity)
-        return await retrieve(identity, message, embeddings)
+        with SessionLocal() as db:
+            return await retrieve(identity, message, embeddings, db=db, workspace_id=workspace_id)
 
     return ChatRuntime(
         load_identity=lambda identity_id: get_registry().get(identity_id),
@@ -111,7 +114,7 @@ def build_chat_graph(runtime: ChatRuntime):
         }
 
     async def retrieve_context_node(state: ChatState) -> ChatState:
-        result = runtime.retrieve(state["identity"], state["message"])
+        result = runtime.retrieve(state["identity"], state["message"], state["workspace_id"])
         chunks = await result if hasattr(result, "__await__") else result
         return {
             "retrieved_chunks": chunks,
@@ -159,6 +162,8 @@ def persist_messages(db: Session, state: ChatState) -> None:
         role="user",
         content=state["message"],
         sources_json=None,
+        request_id=state.get("request_id"),
+        status="complete",
     )
     assistant_message = Message(
         id=str(uuid.uuid4()),
@@ -167,10 +172,11 @@ def persist_messages(db: Session, state: ChatState) -> None:
         role="assistant",
         content=state.get("answer", ""),
         sources_json=state.get("sources", []),
+        request_id=state.get("request_id"),
+        status=state.get("status", "complete"),
     )
     db.add_all([user_message, assistant_message])
     conversation = db.get(Conversation, conversation_id)
     if conversation is not None:
         conversation.updated_at = utc_now()
     db.commit()
-

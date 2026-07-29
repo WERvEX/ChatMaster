@@ -5,9 +5,10 @@ import { ChatMessage } from "./ChatMessage";
 interface Props {
   messages: Message[];
   isStreaming: boolean;
+  emptyText: string;
 }
 
-export function ChatWindow({ messages, isStreaming }: Props) {
+export function ChatWindow({ messages, isStreaming, emptyText }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,7 +18,7 @@ export function ChatWindow({ messages, isStreaming }: Props) {
   return (
     <div className="chat-window">
       {messages.length === 0 && (
-        <div className="empty-hint">选择一个身份，开始对话吧。</div>
+        <div className="empty-hint">{emptyText}</div>
       )}
       {messages.map((m, i) => (
         <ChatMessage key={i} msg={m} />

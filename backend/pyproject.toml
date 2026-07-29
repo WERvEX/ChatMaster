@@ -30,6 +30,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "sse-starlette>=2.1",
     "pyyaml>=6.0",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,9 @@ dev = [
 
 [project.scripts]
 chatmaster-ingest = "chatmaster.cli.ingest:app"
+chatmaster-rebuild-index = "chatmaster.cli.rebuild_index:app"
+chatmaster-cleanup-indexes = "chatmaster.cli.cleanup_indexes:app"
+chatmaster-import-legacy-providers = "chatmaster.cli.import_legacy_providers:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -53,6 +57,12 @@ include = ["chatmaster*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# FastAPI's compatibility wrapper currently emits this upstream warning for
+# every TestClient import; keep test output focused until the upstream API is
+# replaced.
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 100

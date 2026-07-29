@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from chatmaster.db.models import Conversation, Message
-from chatmaster.identities.loader import IdentityNotFound, get_registry
+from chatmaster.identities.loader import get_registry
 
 
 class ConversationNotFound(KeyError):
@@ -78,10 +78,21 @@ def load_history(
     workspace_id: str,
     conversation_id: str,
 ) -> list[dict[str, str]]:
-    messages = list_messages(
-        db, workspace_id=workspace_id, conversation_id=conversation_id
-    )
-    return [{"role": message.role, "content": message.content} for message in messages]
+    messages = list_messages(db, workspace_id=workspace_id, conversation_id=conversation_id)
+    from chatmaster.config import get_settings
+
+    settings = get_settings()
+    selected: list[Message] = []
+    total_chars = 0
+    for item in reversed(messages):
+        if len(selected) >= settings.chat_history_max_messages:
+            break
+        if selected and total_chars + len(item.content) > settings.chat_history_max_chars:
+            break
+        selected.append(item)
+        total_chars += len(item.content)
+    selected.reverse()
+    return [{"role": message.role, "content": message.content} for message in selected]
 
 
 def delete_conversation(db: Session, *, workspace_id: str, conversation_id: str) -> None:

@@ -39,12 +39,16 @@ def _collect_files(path: Path) -> list[Path]:
 
 @app.command()
 def main(
-    identity: str = typer.Option(..., "--identity", "-i", help="Identity id, e.g. legal_expert"),
+    identity: str | None = typer.Option(
+        None, "--identity", "-i", help="Identity id, e.g. legal_expert"
+    ),
     path: Path | None = typer.Option(None, "--path", "-p", help="Folder or file to ingest"),
     files: list[Path] | None = typer.Option(None, "--files", "-f", help="Explicit file(s)"),
     common: bool = typer.Option(False, "--common", help="Ingest into the shared common collection"),
 ):
     target = "common" if common else "private"
+    if not common and not identity:
+        raise typer.BadParameter("--identity is required unless --common is used.")
 
     candidates: list[Path] = []
     if path:
@@ -62,7 +66,7 @@ def main(
         seed_local_data(db, settings)
 
         typer.echo(
-            f"Ingesting {len(candidates)} file(s) into '{target}' for identity '{identity}'..."
+            f"Ingesting {len(candidates)} file(s) into '{target}' for identity '{identity or 'common'}'..."
         )
         total_chunks = 0
         for candidate in candidates:
