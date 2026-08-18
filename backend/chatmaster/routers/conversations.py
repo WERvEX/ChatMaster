@@ -16,7 +16,12 @@ from chatmaster.conversations.service import (
 from chatmaster.core.auth import get_current_workspace_id
 from chatmaster.db.session import get_db
 from chatmaster.identities.service import IdentityNotFound
-from chatmaster.schemas.api import ConversationCreate, ConversationOut, ConversationUpdate, MessageOut
+from chatmaster.schemas.api import (
+    ConversationCreate,
+    ConversationOut,
+    ConversationUpdate,
+    MessageOut,
+)
 
 router = APIRouter(tags=["conversations"])
 

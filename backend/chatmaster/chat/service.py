@@ -78,9 +78,7 @@ def _begin_turn(
             conversation = db.get(Conversation, conversation_id)
             if conversation is not None and conversation.title == "新对话":
                 has_messages = db.scalars(
-                    select(Message.id)
-                    .where(Message.conversation_id == conversation_id)
-                    .limit(1)
+                    select(Message.id).where(Message.conversation_id == conversation_id).limit(1)
                 ).first()
                 if has_messages is None:
                     conversation.title = title_from_message(message)

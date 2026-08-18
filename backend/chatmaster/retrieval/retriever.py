@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 from chatmaster.ai.vectorstore import get_store
 from chatmaster.config import get_settings
 from chatmaster.identities.schema import IdentityConfig
-from chatmaster.retrieval.schemas import RetrievedChunk, SearchHit
 from chatmaster.retrieval.indexes import active_collection, assert_indexes_fresh
+from chatmaster.retrieval.schemas import RetrievedChunk, SearchHit
 
 _RRF_K = 60
 
@@ -114,7 +114,12 @@ async def retrieve(
 ) -> list[RetrievedChunk]:
     settings = get_settings()
     cfg = identity.retrieval
-    assert_indexes_fresh(db, workspace_id=workspace_id)
+    assert_indexes_fresh(
+        db,
+        workspace_id=workspace_id,
+        identity_id=identity.id,
+        include_private=identity.uses_private_knowledge,
+    )
 
     common_collection = active_collection(
         db,

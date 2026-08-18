@@ -15,13 +15,13 @@ def init_db() -> None:
 def migrate_db() -> None:
     """Upgrade the runtime database, adopting legacy create_all databases once."""
     import shutil
-    from datetime import datetime
+    from datetime import datetime, timezone
     from pathlib import Path
 
-    from alembic import command
     from alembic.config import Config
     from sqlalchemy import inspect
 
+    from alembic import command
     from chatmaster.config import get_settings
 
     settings = get_settings()
@@ -34,7 +34,7 @@ def migrate_db() -> None:
         if settings.database_url.startswith("sqlite:///"):
             db_path = Path(settings.database_url.removeprefix("sqlite:///"))
             if db_path.exists():
-                suffix = datetime.now().strftime("%Y%m%d%H%M%S")
+                suffix = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
                 shutil.copy2(db_path, db_path.with_suffix(db_path.suffix + f".{suffix}.bak"))
         message_columns = (
             {column["name"] for column in inspector.get_columns("messages")}

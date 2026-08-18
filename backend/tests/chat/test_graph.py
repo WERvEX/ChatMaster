@@ -228,8 +228,8 @@ async def test_chat_service_returns_error_event_for_unknown_identity() -> None:
 
 @pytest.mark.asyncio
 async def test_durable_chat_turn_is_idempotent_and_returns_persisted_id(monkeypatch) -> None:
-    from chatmaster.chat.graph import ChatRuntime
     from chatmaster.chat import service
+    from chatmaster.chat.graph import ChatRuntime
 
     engine = create_engine("sqlite:///:memory:", future=True)
     test_session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)

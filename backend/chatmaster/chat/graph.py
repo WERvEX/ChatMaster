@@ -16,8 +16,8 @@ from chatmaster.ai.prompts import build_prompt, format_context
 from chatmaster.conversations.service import load_history as load_history_from_db
 from chatmaster.db.models import Conversation, Message, utc_now
 from chatmaster.db.session import SessionLocal
-from chatmaster.identities.service import get_identity_config
 from chatmaster.identities.schema import IdentityConfig
+from chatmaster.identities.service import get_identity_config
 from chatmaster.retrieval.retriever import retrieve
 from chatmaster.retrieval.schemas import RetrievedChunk
 

@@ -7,7 +7,7 @@ import json
 import uuid
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from chatmaster.ai.models import build_embeddings
@@ -76,11 +76,25 @@ class IndexRebuildRequired(RuntimeError):
     """The configured embedding model no longer matches an active index."""
 
 
-def assert_indexes_fresh(db: Session, *, workspace_id: str) -> None:
+def assert_indexes_fresh(
+    db: Session,
+    *,
+    workspace_id: str,
+    identity_id: str | None = None,
+    include_private: bool = False,
+) -> None:
+    scopes = [("common", None)]
+    if include_private and identity_id:
+        scopes.append(("private", identity_id))
+    scope_filters = [
+        and_(IndexVersion.namespace == namespace, IndexVersion.identity_id == scope_identity)
+        for namespace, scope_identity in scopes
+    ]
     stale = db.scalars(
         select(IndexVersion).where(
             IndexVersion.workspace_id == workspace_id,
             IndexVersion.status == "stale",
+            or_(*scope_filters),
         )
     ).first()
     if stale is not None:

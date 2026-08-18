@@ -6,11 +6,13 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.orm import aliased
 
 from chatmaster.config import get_settings
 from chatmaster.db.models import Document, IngestJob
 from chatmaster.db.session import SessionLocal
+from chatmaster.documents.service import document_operation_lock
 from chatmaster.services.ingest_service import ingest
 
 logger = logging.getLogger(__name__)
@@ -29,46 +31,80 @@ def _executor() -> ThreadPoolExecutor:
         return _EXECUTOR
 
 
+def _claim_job(db, *, job_id: str, document_id: str) -> bool:
+    """Atomically claim a pending job when no sibling job is already running."""
+    other_job = aliased(IngestJob)
+    claimed = db.execute(
+        update(IngestJob)
+        .where(
+            IngestJob.id == job_id,
+            IngestJob.status == "pending",
+            ~select(other_job.id)
+            .where(
+                other_job.document_id == document_id,
+                other_job.status == "running",
+                other_job.id != job_id,
+            )
+            .exists(),
+        )
+        .values(status="running", error=None)
+    ).rowcount
+    return claimed == 1
+
+
 def _run_job(job_id: str) -> None:
     with SessionLocal() as db:
-        job = db.get(IngestJob, job_id)
-        if job is None or job.status not in {"pending", "running"}:
+        initial_job = db.get(IngestJob, job_id)
+        if initial_job is None:
             return
-        document = db.get(Document, job.document_id)
-        if document is None:
-            job.status = "failed"
-            job.error = "Document not found"
+        document_id = initial_job.document_id
+        with document_operation_lock(initial_job.document_id):
+            if not _claim_job(db, job_id=job_id, document_id=document_id):
+                db.rollback()
+                return
             db.commit()
-            return
-        job.status = "running"
-        document.status = "ingesting"
-        db.commit()
-        try:
-            result = ingest(
-                document.identity_id,
-                [__import__("pathlib").Path(document.storage_path)],
-                target=document.namespace,
-                workspace_id=document.workspace_id,
-                db=db,
-            )
-            errors = [item.error for item in result.files if item.error]
-            if errors or result.total_chunks == 0:
-                raise RuntimeError("; ".join(errors) or "No indexable content was produced")
-            job.status = "completed"
-            job.total_chunks = result.total_chunks
-            job.error = None
-            document.status = "indexed"
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Ingest job failed job_id=%s document_id=%s", job.id, document.id)
-            db.rollback()
             job = db.get(IngestJob, job_id)
-            document = db.get(Document, job.document_id) if job is not None else None
-            if job is not None:
+            if job is None:
+                return
+            document = db.get(Document, job.document_id)
+            if document is None:
                 job.status = "failed"
-                job.error = f"{type(exc).__name__}: {exc}"
-            if document is not None:
-                document.status = "failed"
-        db.commit()
+                job.error = "Document not found"
+                db.commit()
+                return
+            document.status = "ingesting"
+            db.commit()
+            try:
+                result = ingest(
+                    document.identity_id,
+                    [__import__("pathlib").Path(document.storage_path)],
+                    target=document.namespace,
+                    workspace_id=document.workspace_id,
+                    db=db,
+                )
+                db.expire_all()
+                document = db.get(Document, job.document_id)
+                job = db.get(IngestJob, job_id)
+                if document is None or job is None or job.status != "running":
+                    raise RuntimeError("Document was removed while it was being indexed")
+                errors = [item.error for item in result.files if item.error]
+                if errors or result.total_chunks == 0:
+                    raise RuntimeError("; ".join(errors) or "No indexable content was produced")
+                job.status = "completed"
+                job.total_chunks = result.total_chunks
+                job.error = None
+                document.status = "indexed"
+            except Exception as exc:
+                logger.exception("Ingest job failed job_id=%s document_id=%s", job_id, document_id)
+                db.rollback()
+                job = db.get(IngestJob, job_id)
+                document = db.get(Document, job.document_id) if job is not None else None
+                if job is not None:
+                    job.status = "failed"
+                    job.error = f"{type(exc).__name__}: {exc}"
+                if document is not None:
+                    document.status = "failed"
+            db.commit()
 
 
 def enqueue_job(job_id: str) -> None:
@@ -109,7 +145,7 @@ def enqueue_index_rebuild(*, workspace_id: str, identity_id: str | None, target:
                     identity_id=identity_id,
                     target=target,
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception(
                     "Index rebuild failed workspace_id=%s identity_id=%s target=%s",
                     workspace_id,

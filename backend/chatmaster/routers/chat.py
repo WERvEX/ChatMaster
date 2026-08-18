@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 
+from chatmaster.chat.service import request_cancel, stream_chat
 from chatmaster.conversations.service import ConversationNotFound, get_conversation
 from chatmaster.core.auth import get_current_user_id, get_current_workspace_id
 from chatmaster.db.session import get_db
 from chatmaster.identities.service import IdentityNotFound, get_identity_model
 from chatmaster.schemas.api import ChatRequest
-from chatmaster.chat.service import request_cancel, stream_chat
 
 router = APIRouter(prefix="/api", tags=["chat"])
 

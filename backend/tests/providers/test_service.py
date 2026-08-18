@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,6 +25,14 @@ class DummySettings:
     allow_private_provider_urls = True
 
 
+class PrivateBlockedSettings(DummySettings):
+    allow_private_provider_urls = False
+
+
+def _public_addresses(*items: str):
+    return [(2, 1, 6, "", (item, 0)) for item in items]
+
+
 def _session() -> Session:
     engine = create_engine("sqlite:///:memory:", future=True)
     Base.metadata.create_all(bind=engine)
@@ -45,9 +54,13 @@ def test_get_provider_config_seeds_from_settings_when_missing() -> None:
         assert cfg.embedding.provider == "huggingface"
 
 
-def test_save_provider_config_replaces_new_keys() -> None:
+def test_save_provider_config_replaces_new_keys(monkeypatch) -> None:
     from chatmaster.providers.service import get_provider_config, save_provider_config
 
+    monkeypatch.setattr(
+        "chatmaster.providers.security.socket.getaddrinfo",
+        lambda *_: _public_addresses("93.184.216.34"),
+    )
     with _session() as db:
         db.add(Workspace(id="local", name="Local Workspace"))
         db.commit()
@@ -78,9 +91,13 @@ def test_save_provider_config_replaces_new_keys() -> None:
         assert row.chat_api_key_encrypted.startswith("fernet:")
 
 
-def test_save_provider_config_keeps_previous_keys_when_payload_is_masked() -> None:
+def test_save_provider_config_keeps_previous_keys_when_payload_is_masked(monkeypatch) -> None:
     from chatmaster.providers.service import get_provider_config, save_provider_config
 
+    monkeypatch.setattr(
+        "chatmaster.providers.security.socket.getaddrinfo",
+        lambda *_: _public_addresses("93.184.216.34"),
+    )
     with _session() as db:
         db.add(Workspace(id="local", name="Local Workspace"))
         db.commit()
@@ -123,3 +140,26 @@ def test_save_provider_config_keeps_previous_keys_when_payload_is_masked() -> No
         assert saved.chat.api_key == "sk-secret-chat"
         assert saved.chat.base_url == "https://api.changed.com/v1"
         assert saved.embedding.api_key == "sk-secret-embedding"
+
+
+def test_save_provider_config_validates_huggingface_endpoint(monkeypatch) -> None:
+    from chatmaster.providers.security import UnsafeProviderUrl
+    from chatmaster.providers.service import save_provider_config
+
+    monkeypatch.setattr(
+        "chatmaster.providers.security.socket.getaddrinfo",
+        lambda *_: _public_addresses("192.168.1.20"),
+    )
+    payload = ProvidersConfig(
+        chat=ChatProviderConfig(model="gpt-4o-mini"),
+        embedding=EmbeddingProviderConfig(
+            provider="huggingface",
+            model="BAAI/bge-small-zh-v1.5",
+            huggingface_endpoint="http://provider.test",
+        ),
+    )
+    with _session() as db:
+        db.add(Workspace(id="local", name="Local Workspace"))
+        db.commit()
+        with pytest.raises(UnsafeProviderUrl):
+            save_provider_config(db, "local", payload, PrivateBlockedSettings())
