@@ -8,8 +8,8 @@ POST /api/providers/test  → smoke-test the configured chat + embedding provide
 
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
 
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
@@ -104,7 +104,7 @@ async def test_providers(workspace_id: str = Depends(get_current_workspace_id)):
             model = build_chat_model(dummy)
             model.invoke([HumanMessage(content="ping")])
             return "ok"
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Provider chat test failed")
             return "failed (see server log)"
 
@@ -113,7 +113,7 @@ async def test_providers(workspace_id: str = Depends(get_current_workspace_id)):
             emb = build_embeddings()
             vec = emb.embed_query("dimension probe")
             return f"ok (dim={len(vec)})"
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Provider embedding test failed")
             return "failed (see server log)"
 

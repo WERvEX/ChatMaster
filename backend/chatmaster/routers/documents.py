@@ -11,6 +11,7 @@ from chatmaster.core.auth import get_current_workspace_id
 from chatmaster.db.models import Document, IngestJob
 from chatmaster.db.session import get_db
 from chatmaster.documents.service import (
+    DocumentOperationConflict,
     UnsupportedDocumentType,
     delete_document,
     list_documents,
@@ -156,6 +157,8 @@ async def retry_job(
         job = retry_ingest_job(db, workspace_id=workspace_id, job_id=job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Ingest job not found") from None
+    except DocumentOperationConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     from chatmaster.documents.jobs import enqueue_job
 
     enqueue_job(job.id)
@@ -172,7 +175,9 @@ async def remove_document(
         delete_document(db, workspace_id=workspace_id, document_id=document_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Document not found") from None
-    except Exception as exc:  # noqa: BLE001
+    except DocumentOperationConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except Exception as exc:
         raise HTTPException(status_code=503, detail="Document cleanup failed") from exc
 
 

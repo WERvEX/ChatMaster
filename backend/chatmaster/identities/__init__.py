@@ -9,8 +9,8 @@ from chatmaster.identities.schema import IdentityConfig, IdentityOut, RetrievalC
 
 __all__ = [
     "IdentityConfig",
-    "IdentityOut",
     "IdentityNotFound",
+    "IdentityOut",
     "IdentityRegistry",
     "RetrievalConfig",
     "get_registry",

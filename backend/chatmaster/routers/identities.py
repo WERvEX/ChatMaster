@@ -136,8 +136,6 @@ async def clone_identity(
     db: Session = Depends(get_db),
 ):
     try:
-        return to_detail(
-            duplicate_identity(db, workspace_id=workspace_id, identity_id=identity_id)
-        )
+        return to_detail(duplicate_identity(db, workspace_id=workspace_id, identity_id=identity_id))
     except IdentityNotFound:
         raise HTTPException(status_code=404, detail="Identity not found") from None

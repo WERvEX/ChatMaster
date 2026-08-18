@@ -19,6 +19,7 @@ import {
   retryIngestJob,
 } from "../../api/client";
 import { DocumentUpload } from "../../components/DocumentUpload";
+import type { IndexVersionOut } from "../../types/api";
 
 interface Props {
   identityId: string | null;
@@ -34,6 +35,7 @@ export function KnowledgePage({ identityId, onBack }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [rebuildingId, setRebuildingId] = useState<string | null>(null);
   const documents = useQuery({
     queryKey: ["documents", identityId, scope, statusFilter],
     queryFn: () =>
@@ -76,9 +78,14 @@ export function KnowledgePage({ identityId, onBack }: Props) {
     }
   };
 
-  const rebuild = async (target: "private" | "common") => {
-    await rebuildIndex(target, target === "private" ? identityId : null);
-    await indexes.refetch();
+  const rebuild = async (index: IndexVersionOut) => {
+    setRebuildingId(index.id);
+    try {
+      await rebuildIndex(index.namespace, index.namespace === "private" ? index.identity_id : null);
+      await indexes.refetch();
+    } finally {
+      setRebuildingId(null);
+    }
   };
 
   return (
@@ -307,10 +314,13 @@ export function KnowledgePage({ identityId, onBack }: Props) {
                 {index.status === "stale" && (
                   <button
                     className="btn-link"
-                    onClick={() => void rebuild(index.namespace)}
-                    disabled={index.namespace === "private" && !identityId}
+                    onClick={() => void rebuild(index)}
+                    disabled={
+                      rebuildingId !== null ||
+                      (index.namespace === "private" && !index.identity_id)
+                    }
                   >
-                    重建
+                    {rebuildingId === index.id ? "重建中…" : "重建"}
                   </button>
                 )}
               </div>

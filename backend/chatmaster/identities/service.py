@@ -53,11 +53,7 @@ def list_identity_models(
     stmt = _query(db, workspace_id)
     if not include_archived:
         stmt = stmt.where(Identity.is_active.is_(True))
-    return list(
-        db.scalars(
-            stmt.order_by(Identity.is_system.desc(), Identity.created_at.asc())
-        )
-    )
+    return list(db.scalars(stmt.order_by(Identity.is_system.desc(), Identity.created_at.asc())))
 
 
 def to_config(identity: Identity) -> IdentityConfig:

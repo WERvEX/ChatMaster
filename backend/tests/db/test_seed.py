@@ -23,7 +23,9 @@ def _session() -> Session:
     return SessionLocal()
 
 
-def test_seed_local_data_inserts_workspace_user_yaml_identities_and_fallback(tmp_path: Path) -> None:
+def test_seed_local_data_inserts_workspace_user_yaml_identities_and_fallback(
+    tmp_path: Path,
+) -> None:
     from chatmaster.db.seed import seed_local_data
 
     identities_yaml = tmp_path / "identities.yaml"

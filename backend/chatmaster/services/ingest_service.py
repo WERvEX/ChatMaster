@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from chatmaster.ai.chunkers import split_documents
 from chatmaster.ai.loaders import UnsupportedFileType, load_file
 from chatmaster.ai.models import build_embeddings
-from chatmaster.ai.vectorstore import get_store
+from chatmaster.ai.vectorstore import delete_points, get_store
 from chatmaster.config import get_settings
-from chatmaster.db.models import Document, DocumentChunk
+from chatmaster.db.models import Document, DocumentChunk, IndexVersion
 from chatmaster.identities.service import get_identity_model, to_config
 from chatmaster.schemas.api import IngestFileResult, IngestResult
+
+logger = logging.getLogger(__name__)
 
 
 class IngestFailed(RuntimeError):
@@ -65,7 +68,12 @@ def ingest(
             )
         from chatmaster.retrieval.indexes import active_collection, assert_indexes_fresh
 
-        assert_indexes_fresh(db, workspace_id=workspace_id)
+        assert_indexes_fresh(
+            db,
+            workspace_id=workspace_id,
+            identity_id=identity_id,
+            include_private=target == "private",
+        )
         collection = active_collection(
             db,
             workspace_id=workspace_id,
@@ -79,19 +87,28 @@ def ingest(
     if db is not None and workspace_id is not None:
         from chatmaster.retrieval.indexes import ensure_active_version
 
-        version = ensure_active_version(
-            db,
-            workspace_id=workspace_id,
-            logical_name=logical_collection,
-            identity_id=None if target == "common" else identity_id,
-            embeddings=embeddings,
-        )
+        if collection_name is not None:
+            version = db.scalars(
+                select(IndexVersion).where(
+                    IndexVersion.workspace_id == workspace_id,
+                    IndexVersion.collection_name == collection_name,
+                )
+            ).first()
+        if version is None:
+            version = ensure_active_version(
+                db,
+                workspace_id=workspace_id,
+                logical_name=logical_collection,
+                identity_id=None if target == "common" else identity_id,
+                embeddings=embeddings,
+            )
     store = get_store(collection, embeddings)
 
     file_results: list[IngestFileResult] = []
     total_chunks = 0
 
     for path in files:
+        written_point_ids: list[str] = []
         try:
             docs = load_file(path, identity_id=identity_id or "common")
             chunks = split_documents(docs)
@@ -138,8 +155,23 @@ def ingest(
                                 metadata_json=dict(chunk.metadata),
                             )
                         )
-                    store.add_documents(chunks, ids=point_ids)
-                    db.commit()
+                    written_point_ids = point_ids
+                    try:
+                        store.add_documents(chunks, ids=point_ids)
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                        if written_point_ids:
+                            try:
+                                delete_points(collection, written_point_ids)
+                            except Exception as cleanup_exc:  # noqa: BLE001
+                                logger.warning(
+                                    "Failed to compensate Qdrant points collection=%s count=%d: %s",
+                                    collection,
+                                    len(written_point_ids),
+                                    cleanup_exc,
+                                )
+                        raise
                 else:
                     store.add_documents(chunks)
             file_results.append(IngestFileResult(file=path.name, chunks=len(chunks)))

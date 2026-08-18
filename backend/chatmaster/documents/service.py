@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import shutil
 import tempfile
+import threading
 import uuid
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import select
@@ -22,6 +24,22 @@ from chatmaster.services.ingest_service import ingest
 
 class UnsupportedDocumentType(ValueError):
     pass
+
+
+class DocumentOperationConflict(RuntimeError):
+    """Raised when a document already has an active operation."""
+
+
+_DOCUMENT_LOCKS_GUARD = threading.Lock()
+_DOCUMENT_LOCKS: dict[str, threading.RLock] = {}
+
+
+@contextmanager
+def document_operation_lock(document_id: str):
+    with _DOCUMENT_LOCKS_GUARD:
+        lock = _DOCUMENT_LOCKS.setdefault(document_id, threading.RLock())
+    with lock:
+        yield
 
 
 def _sha256(data: bytes) -> str:
@@ -376,46 +394,70 @@ def retry_ingest_job(db: Session, *, workspace_id: str, job_id: str) -> IngestJo
     document = db.get(Document, old.document_id)
     if document is None:
         raise KeyError(old.document_id)
-    job = IngestJob(
-        id=str(uuid.uuid4()),
-        workspace_id=workspace_id,
-        document_id=document.id,
-        status="pending",
-        error=None,
-        total_chunks=0,
-    )
-    document.status = "pending"
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return job
+    with document_operation_lock(document.id):
+        db.refresh(old)
+        if old.status != "failed":
+            raise DocumentOperationConflict("Only failed ingest jobs can be retried")
+        active = db.scalars(
+            select(IngestJob).where(
+                IngestJob.document_id == document.id,
+                IngestJob.status.in_(("pending", "running")),
+            )
+        ).first()
+        if active is not None:
+            raise DocumentOperationConflict("Document already has an active ingest job")
+        job = IngestJob(
+            id=str(uuid.uuid4()),
+            workspace_id=workspace_id,
+            document_id=document.id,
+            status="pending",
+            error=None,
+            total_chunks=0,
+        )
+        document.status = "pending"
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return job
 
 
 def delete_document(db: Session, *, workspace_id: str, document_id: str) -> None:
     document = db.get(Document, document_id)
     if document is None or document.workspace_id != workspace_id:
         raise KeyError(document_id)
-    try:
-        from chatmaster.ai.vectorstore import delete_points
+    with document_operation_lock(document_id):
+        db.refresh(document)
+        active = db.scalars(
+            select(IngestJob).where(
+                IngestJob.document_id == document_id,
+                IngestJob.status.in_(("pending", "running")),
+            )
+        ).first()
+        if active is not None:
+            raise DocumentOperationConflict("Document is still being indexed")
+        try:
+            from chatmaster.ai.vectorstore import delete_points
 
-        chunks = list(
-            db.scalars(select(DocumentChunk).where(DocumentChunk.document_id == document_id))
-        )
-        by_collection: dict[str, list[str]] = {}
-        for chunk in chunks:
-            version = db.get(IndexVersion, chunk.index_version_id)
-            if version is not None:
-                by_collection.setdefault(version.collection_name, []).append(chunk.qdrant_point_id)
-        for collection, point_ids in by_collection.items():
-            delete_points(collection, point_ids)
-        stored_path = Path(document.storage_path)
-        stored_path.unlink(missing_ok=True)
-        db.delete(document)
-        db.commit()
-    except Exception:
-        db.rollback()
-        document = db.get(Document, document_id)
-        if document is not None:
-            document.status = "delete_failed"
+            chunks = list(
+                db.scalars(select(DocumentChunk).where(DocumentChunk.document_id == document_id))
+            )
+            by_collection: dict[str, list[str]] = {}
+            for chunk in chunks:
+                version = db.get(IndexVersion, chunk.index_version_id)
+                if version is not None:
+                    by_collection.setdefault(version.collection_name, []).append(
+                        chunk.qdrant_point_id
+                    )
+            for collection, point_ids in by_collection.items():
+                delete_points(collection, point_ids)
+            stored_path = Path(document.storage_path)
+            stored_path.unlink(missing_ok=True)
+            db.delete(document)
             db.commit()
-        raise
+        except Exception:
+            db.rollback()
+            document = db.get(Document, document_id)
+            if document is not None:
+                document.status = "delete_failed"
+                db.commit()
+            raise

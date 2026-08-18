@@ -132,6 +132,10 @@ def save_provider_config(
         payload.embedding.base_url,
         allow_private_network=getattr(settings, "allow_private_provider_urls", False),
     )
+    validate_provider_url(
+        payload.embedding.huggingface_endpoint,
+        allow_private_network=getattr(settings, "allow_private_provider_urls", False),
+    )
     current = get_provider_config(db, workspace_id, settings)
     row = _find_row(db, workspace_id)
     if row is None:

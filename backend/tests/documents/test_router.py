@@ -12,7 +12,7 @@ from chatmaster.db.session import get_db
 from chatmaster.routers.documents import router
 
 
-def _client():
+def _client(*, job_status: str = "completed"):
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -41,7 +41,7 @@ def _client():
                 id="job-1",
                 workspace_id="local",
                 document_id="document-1",
-                status="completed",
+                status=job_status,
                 total_chunks=2,
             )
         )
@@ -78,3 +78,19 @@ def test_list_ingest_jobs_endpoint_returns_persisted_jobs() -> None:
     payload = response.json()
     assert payload[0]["id"] == "job-1"
     assert payload[0]["status"] == "completed"
+
+
+def test_retry_active_ingest_job_returns_conflict() -> None:
+    client = _client(job_status="pending")
+
+    response = client.post("/api/ingest-jobs/job-1/retry")
+
+    assert response.status_code == 409
+
+
+def test_delete_document_with_active_job_returns_conflict() -> None:
+    client = _client(job_status="running")
+
+    response = client.delete("/api/documents/document-1")
+
+    assert response.status_code == 409

@@ -115,6 +115,10 @@ def build_embeddings(identity: IdentityConfig | None = None) -> Embeddings:
     provider = cfg.provider.lower()
 
     if provider == "huggingface":
+        validate_provider_url(
+            cfg.huggingface_endpoint,
+            allow_private_network=settings.allow_private_provider_urls,
+        )
         return _build_hf_embeddings(model, cfg.huggingface_endpoint)
     if provider in _OPENAI_COMPATIBLE:
         api_key = cfg.api_key or settings.openai_api_key

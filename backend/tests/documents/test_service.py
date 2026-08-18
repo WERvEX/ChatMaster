@@ -7,7 +7,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from chatmaster.db.base import Base
-from chatmaster.db.models import Document, Identity, IngestJob, Workspace
+from chatmaster.db.models import (
+    Document,
+    DocumentChunk,
+    Identity,
+    IndexVersion,
+    IngestJob,
+    Workspace,
+)
 
 
 def _session() -> Session:
@@ -197,3 +204,149 @@ async def test_common_upload_submission_deduplicates_with_non_null_scope(tmp_pat
     assert documents[0].scope_key == "common"
     assert first.document_id == second.document_id
     assert second.duplicate is True
+
+
+def test_retry_only_allows_failed_jobs() -> None:
+    from chatmaster.documents.service import DocumentOperationConflict, retry_ingest_job
+
+    with _session() as db:
+        _seed_identity(db)
+        document = Document(
+            id="document-1",
+            workspace_id="local",
+            identity_id="legal_expert",
+            namespace="private",
+            scope_key="legal_expert",
+            filename="note.txt",
+            storage_path="note.txt",
+            sha256="b" * 64,
+            status="pending",
+        )
+        db.add_all(
+            [
+                document,
+                IngestJob(
+                    id="job-1",
+                    workspace_id="local",
+                    document_id=document.id,
+                    status="pending",
+                    total_chunks=0,
+                ),
+            ]
+        )
+        db.commit()
+
+        with pytest.raises(DocumentOperationConflict, match="Only failed"):
+            retry_ingest_job(db, workspace_id="local", job_id="job-1")
+
+
+def test_worker_claim_allows_only_one_running_job_per_document() -> None:
+    from chatmaster.documents.jobs import _claim_job
+
+    with _session() as db:
+        _seed_identity(db)
+        document = Document(
+            id="document-1",
+            workspace_id="local",
+            identity_id="legal_expert",
+            namespace="private",
+            scope_key="legal_expert",
+            filename="note.txt",
+            storage_path="note.txt",
+            sha256="d" * 64,
+            status="pending",
+        )
+        db.add_all(
+            [
+                document,
+                IngestJob(
+                    id="job-1",
+                    workspace_id="local",
+                    document_id=document.id,
+                    status="pending",
+                    total_chunks=0,
+                ),
+                IngestJob(
+                    id="job-2",
+                    workspace_id="local",
+                    document_id=document.id,
+                    status="pending",
+                    total_chunks=0,
+                ),
+            ]
+        )
+        db.commit()
+
+        assert _claim_job(db, job_id="job-1", document_id=document.id)
+        db.commit()
+        assert not _claim_job(db, job_id="job-2", document_id=document.id)
+
+
+def test_delete_document_cleans_vectors_and_persisted_records(tmp_path: Path, monkeypatch) -> None:
+    from chatmaster.documents.service import delete_document
+
+    stored_path = tmp_path / "note.txt"
+    stored_path.write_text("hello", encoding="utf-8")
+    deleted: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        "chatmaster.ai.vectorstore.delete_points",
+        lambda collection, ids: deleted.append((collection, ids)),
+    )
+
+    with _session() as db:
+        _seed_identity(db)
+        document = Document(
+            id="document-1",
+            workspace_id="local",
+            identity_id="legal_expert",
+            namespace="private",
+            scope_key="legal_expert",
+            filename="note.txt",
+            storage_path=str(stored_path),
+            sha256="c" * 64,
+            status="indexed",
+        )
+        version = IndexVersion(
+            id="version-1",
+            workspace_id="local",
+            namespace="private",
+            identity_id="legal_expert",
+            collection_name="private-v1",
+            embedding_provider="test",
+            embedding_model="test",
+            embedding_dim=3,
+            status="active",
+        )
+        db.add_all(
+            [
+                document,
+                version,
+                DocumentChunk(
+                    id="chunk-1",
+                    workspace_id="local",
+                    document_id=document.id,
+                    index_version_id=version.id,
+                    qdrant_point_id="point-1",
+                    chunk_index=0,
+                    text="hello",
+                    metadata_json={},
+                ),
+                IngestJob(
+                    id="job-1",
+                    workspace_id="local",
+                    document_id=document.id,
+                    status="completed",
+                    total_chunks=1,
+                ),
+            ]
+        )
+        db.commit()
+
+        delete_document(db, workspace_id="local", document_id=document.id)
+
+        assert db.get(Document, document.id) is None
+        assert db.query(DocumentChunk).count() == 0
+        assert db.query(IngestJob).count() == 0
+
+    assert deleted == [("private-v1", ["point-1"])]
+    assert not stored_path.exists()

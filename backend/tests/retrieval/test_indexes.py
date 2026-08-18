@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -18,6 +19,85 @@ def _session():
 class _Settings:
     local_workspace_id = "local"
     common_collection = "common"
+
+
+def test_assert_indexes_fresh_checks_only_required_scopes() -> None:
+    from chatmaster.retrieval.indexes import IndexRebuildRequired, assert_indexes_fresh
+
+    SessionLocal = _session()
+    with SessionLocal() as db:
+        db.add(Workspace(id="local", name="Local"))
+        db.add_all(
+            [
+                IndexVersion(
+                    id="common",
+                    workspace_id="local",
+                    namespace="common",
+                    identity_id=None,
+                    collection_name="common",
+                    embedding_provider="test",
+                    embedding_model="test",
+                    embedding_dim=3,
+                    status="active",
+                ),
+                IndexVersion(
+                    id="private-a",
+                    workspace_id="local",
+                    namespace="private",
+                    identity_id="persona-a",
+                    collection_name="private-a",
+                    embedding_provider="test",
+                    embedding_model="test",
+                    embedding_dim=3,
+                    status="stale",
+                ),
+            ]
+        )
+        db.commit()
+
+        assert_indexes_fresh(
+            db,
+            workspace_id="local",
+            identity_id="persona-b",
+            include_private=True,
+        )
+        with pytest.raises(IndexRebuildRequired):
+            assert_indexes_fresh(
+                db,
+                workspace_id="local",
+                identity_id="persona-a",
+                include_private=True,
+            )
+
+
+def test_assert_indexes_fresh_always_checks_common_scope() -> None:
+    from chatmaster.retrieval.indexes import IndexRebuildRequired, assert_indexes_fresh
+
+    SessionLocal = _session()
+    with SessionLocal() as db:
+        db.add(Workspace(id="local", name="Local"))
+        db.add(
+            IndexVersion(
+                id="common",
+                workspace_id="local",
+                namespace="common",
+                identity_id=None,
+                collection_name="common",
+                embedding_provider="test",
+                embedding_model="test",
+                embedding_dim=3,
+                status="stale",
+            )
+        )
+        db.commit()
+
+        with pytest.raises(IndexRebuildRequired):
+            assert_indexes_fresh(
+                db,
+                workspace_id="local",
+                identity_id="persona-b",
+                include_private=False,
+            )
 
 
 def test_active_collection_uses_active_version(monkeypatch) -> None:
@@ -102,7 +182,7 @@ def test_rebuild_activates_new_version_only_after_success(tmp_path: Path, monkey
                 embedding_provider="old",
                 embedding_model="old",
                 embedding_dim=3,
-                status="active",
+                status="stale",
             )
         )
         db.commit()

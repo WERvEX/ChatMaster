@@ -67,3 +67,8 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+# FastAPI, Typer, and dependency injection declarations intentionally call
+# framework factories in defaults; B008 is not actionable for these APIs.
+ignore = ["B008"]

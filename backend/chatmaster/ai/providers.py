@@ -13,12 +13,11 @@ from __future__ import annotations
 import threading
 import uuid
 from functools import lru_cache
-
-from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from chatmaster.config import get_settings
 

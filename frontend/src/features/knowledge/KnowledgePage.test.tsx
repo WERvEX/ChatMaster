@@ -58,4 +58,42 @@ describe("KnowledgePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(mocks.deleteDocument).toHaveBeenCalledWith("doc-1"));
   });
+
+  it("rebuilds a private index for the identity recorded on that index", async () => {
+    mocks.getDocuments.mockResolvedValue([]);
+    mocks.getIngestJobs.mockResolvedValue([]);
+    mocks.getIndexes.mockResolvedValue([
+      {
+        id: "index-private-2",
+        namespace: "private",
+        identity_id: "persona-2",
+        collection_name: "persona-2-v1",
+        logical_name: "persona-2",
+        embedding_provider: "huggingface",
+        embedding_model: "BAAI/bge-small-zh-v1.5",
+        embedding_dim: 384,
+        config_fingerprint: "test",
+        status: "stale",
+        created_at: "2026-07-29T08:00:00Z",
+        updated_at: "2026-07-29T08:00:00Z",
+      },
+    ]);
+    mocks.rebuildIndex.mockResolvedValue(undefined);
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <KnowledgePage identityId="persona-1" onBack={() => undefined} />
+      </QueryClientProvider>
+    );
+
+    const rebuildButton = await screen.findByRole("button", { name: "重建" });
+    fireEvent.click(rebuildButton);
+
+    await waitFor(() =>
+      expect(mocks.rebuildIndex).toHaveBeenCalledWith("private", "persona-2")
+    );
+  });
 });
