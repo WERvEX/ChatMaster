@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Import all bundled sample documents into SQLite + Qdrant.
 
 Run from the backend/ directory inside the chatmaster conda environment:
